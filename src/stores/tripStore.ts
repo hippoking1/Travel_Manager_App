@@ -164,7 +164,8 @@ export const useTripStore = create<TripStoreState>()(
         if (isGasConfigured()) {
           syncManager.enqueue('TripConfig', 'UPDATE', {
             id: 'startDate',
-            updates: { value: dateStr || '' },
+            key: 'startDate',
+            updates: { key: 'startDate', value: dateStr || '' },
           });
         }
       },
