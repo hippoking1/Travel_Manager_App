@@ -42,7 +42,7 @@ export const FilterBar: React.FC = () => {
             ) : (
               <>
                 <ChevronDown className="w-3.5 h-3.5" />
-                <span>全部展開 (16天)</span>
+                <span>全部展開 ({itinerary.length}天)</span>
               </>
             )}
           </button>
@@ -57,11 +57,19 @@ export const FilterBar: React.FC = () => {
                 : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
             }`}
           >
-            全部天數 (Day 1 - {config.totalDays || 16})
+            全部天數 (Day 1 - {itinerary.length || config.totalDays || 1})
           </button>
 
           {config.bases.map((base) => {
             const isSelected = selectedBaseId === base.id;
+            // 動態根據目前行程分配計算此基地涵蓋的天數
+            const baseDays = itinerary.filter((d) => d.baseId === base.id).map((d) => d.day);
+            const dayRangeText = baseDays.length === 0
+              ? ''
+              : baseDays.length === 1
+                ? `(D${baseDays[0]})`
+                : `(D${baseDays[0]}-${baseDays[baseDays.length - 1]})`;
+
             return (
               <button
                 key={base.id}
@@ -80,9 +88,11 @@ export const FilterBar: React.FC = () => {
                   style={{ backgroundColor: base.color }}
                 />
                 <span>{base.nameZh}</span>
-                <span className="text-[11px] opacity-70">
-                  (D{base.days[0]}-{base.days[base.days.length - 1]})
-                </span>
+                {dayRangeText && (
+                  <span className="text-[11px] opacity-70">
+                    {dayRangeText}
+                  </span>
+                )}
               </button>
             );
           })}

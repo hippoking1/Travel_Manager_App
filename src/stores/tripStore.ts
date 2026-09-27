@@ -32,6 +32,7 @@ export interface TripStoreState {
   // 基本設定 Actions
   updateConfig: (partial: Partial<TripConfig>) => void;
   setStartDate: (dateStr: string | null) => void;
+  setTotalDays: (days: number) => void;
   
   // 行程自由規劃 Actions (需求 2)
   addDay: (baseId?: string) => void;
@@ -170,6 +171,67 @@ export const useTripStore = create<TripStoreState>()(
         }
       },
 
+      setTotalDays: (days) => {
+        const targetDays = Math.max(1, Math.min(90, Math.floor(days)));
+        set((state) => {
+          const currentDays = state.itinerary.length;
+          let nextItinerary = [...state.itinerary];
+
+          if (targetDays > currentDays) {
+            for (let d = currentDays + 1; d <= targetDays; d++) {
+              const lastBaseId =
+                state.itinerary[state.itinerary.length - 1]?.baseId ||
+                state.config.bases[state.config.bases.length - 1]?.id ||
+                'luzern';
+              nextItinerary.push({
+                day: d,
+                baseId: lastBaseId,
+                title: `第 ${d} 天 自訂探索日程`,
+                subtitle: '點擊此卡片可編輯標題、新增景點時段與交通安排',
+                highlights: ['自由探索', '悠閒慢活'],
+                timeBlocks: [
+                  {
+                    period: 'morning',
+                    periodLabel: '上午 09:00 - 12:00',
+                    title: '晨間自由散步與探索',
+                    description: '請點擊編輯此活動以填寫您規劃的景點、交通方式或美食。',
+                    tags: ['senior-friendly'],
+                  },
+                ],
+                foodNotes: [
+                  {
+                    meal: 'lunch',
+                    mealLabel: '午餐',
+                    suggestion: '自選當地景觀餐廳或輕食野餐',
+                    type: 'restaurant',
+                    costEstimate: '約 CHF 20-30 / 人',
+                  },
+                ],
+                supermarketTips: ['查詢附近最近之超市營業時間'],
+              });
+            }
+          } else if (targetDays < currentDays) {
+            nextItinerary = nextItinerary.slice(0, targetDays);
+          }
+
+          return {
+            itinerary: nextItinerary,
+            config: {
+              ...state.config,
+              totalDays: targetDays,
+            },
+          };
+        });
+
+        if (isGasConfigured()) {
+          syncManager.enqueue('TripConfig', 'UPDATE', {
+            id: 'totalDays',
+            key: 'totalDays',
+            updates: { key: 'totalDays', value: String(targetDays) },
+          });
+        }
+      },
+
       // 行程自由規劃
       addDay: (baseId) => {
         set((state) => {
@@ -203,6 +265,14 @@ export const useTripStore = create<TripStoreState>()(
           };
 
           const nextItinerary = [...state.itinerary, newDay];
+          if (isGasConfigured()) {
+            syncManager.enqueue('TripConfig', 'UPDATE', {
+              id: 'totalDays',
+              key: 'totalDays',
+              updates: { key: 'totalDays', value: String(nextItinerary.length) },
+            });
+          }
+
           return {
             itinerary: nextItinerary,
             config: {
@@ -226,6 +296,15 @@ export const useTripStore = create<TripStoreState>()(
           const filtered = state.itinerary
             .filter((d) => d.day !== dayNumber)
             .map((d, idx) => ({ ...d, day: idx + 1 })); // 重新編號天數
+
+          if (isGasConfigured()) {
+            syncManager.enqueue('TripConfig', 'UPDATE', {
+              id: 'totalDays',
+              key: 'totalDays',
+              updates: { key: 'totalDays', value: String(filtered.length) },
+            });
+          }
+
           return {
             itinerary: filtered,
             config: {
@@ -493,15 +572,23 @@ export const useTripStore = create<TripStoreState>()(
                 nextState.checklist = parsedChecklist;
               }
 
-              // 3. 同步 TripConfig (例如 startDate)
+              // 3. 同步 TripConfig (例如 startDate, totalDays)
               if (Array.isArray(remoteData.TripConfig)) {
                 const configMap: Record<string, any> = {};
                 remoteData.TripConfig.forEach((item: any) => {
                   if (item.key) configMap[item.key] = item.value;
                 });
+                const updatedConfig = { ...state.config };
                 if (configMap.startDate) {
-                  nextState.config = { ...state.config, startDate: String(configMap.startDate) };
+                  updatedConfig.startDate = String(configMap.startDate);
                 }
+                if (configMap.totalDays) {
+                  const days = parseInt(String(configMap.totalDays), 10);
+                  if (!isNaN(days) && days > 0) {
+                    updatedConfig.totalDays = days;
+                  }
+                }
+                nextState.config = updatedConfig;
               }
 
               return { ...nextState, isFetchingRemote: false };

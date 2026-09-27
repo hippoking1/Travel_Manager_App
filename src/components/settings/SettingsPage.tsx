@@ -10,10 +10,11 @@ import {
 import { useTripStore } from '../../stores/tripStore';
 
 export const SettingsPage: React.FC = () => {
-  const { config, updateConfig, setStartDate, fetchLatestFromSheets, isFetchingRemote } = useTripStore();
+  const { config, itinerary, updateConfig, setStartDate, setTotalDays, fetchLatestFromSheets, isFetchingRemote } = useTripStore();
 
   const [tripName, setTripName] = useState(config.tripName);
   const [subtitle, setSubtitle] = useState(config.subtitle);
+  const [totalDays, setTotalDaysState] = useState(config.totalDays || itinerary.length || 16);
   const [dateInput, setDateInput] = useState(config.startDate || '');
   
   // 匯率
@@ -28,9 +29,20 @@ export const SettingsPage: React.FC = () => {
 
   const handleSaveGeneral = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (totalDays < itinerary.length) {
+      const confirmReduce = window.confirm(
+        `注意：旅行天數將由 ${itinerary.length} 天縮減為 ${totalDays} 天，第 ${totalDays + 1} 天之後的自訂行程將會被刪除。確定要縮減儲存嗎？`
+      );
+      if (!confirmReduce) return;
+    }
+
+    setTotalDays(totalDays);
+
     updateConfig({
       tripName: tripName.trim(),
       subtitle: subtitle.trim(),
+      totalDays: totalDays,
       currencies: {
         ...config.currencies,
         rates: {
@@ -113,12 +125,83 @@ export const SettingsPage: React.FC = () => {
           </div>
         </div>
 
+        {/* 旅行總天數設定 (動態預先給出對應日程卡片) */}
+        <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-white flex items-center gap-1.5">
+              <span>旅行總天數設定</span>
+              <span className="text-[11px] font-normal text-slate-400">
+                (增減天數將同步生成/修剪「每日行程」卡片與篩選天數)
+              </span>
+            </label>
+            <span className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded font-mono font-bold">
+              共 {totalDays} 天
+            </span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            {/* 加減按鈕控制組 */}
+            <div className="flex items-center border border-slate-700 rounded-xl overflow-hidden bg-slate-900 w-fit">
+              <button
+                type="button"
+                onClick={() => setTotalDaysState((prev) => Math.max(1, prev - 1))}
+                className="w-10 h-10 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-lg font-bold select-none"
+                title="減少 1 天"
+              >
+                -
+              </button>
+              <input
+                type="number"
+                min="1"
+                max="90"
+                value={totalDays}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (!isNaN(val)) setTotalDaysState(Math.max(1, Math.min(90, val)));
+                }}
+                className="w-16 bg-transparent text-center font-mono font-bold text-base text-white focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setTotalDaysState((prev) => Math.min(90, prev + 1))}
+                className="w-10 h-10 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-lg font-bold select-none"
+                title="增加 1 天"
+              >
+                +
+              </button>
+            </div>
+
+            {/* 常見旅遊天數快速選項 */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] text-slate-500 mr-1 hidden sm:inline">快捷預設:</span>
+              {[5, 7, 10, 14, 16, 21].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setTotalDaysState(d)}
+                  className={`px-2.5 py-1 rounded-lg text-xs transition-all ${
+                    totalDays === d
+                      ? 'bg-red-600 text-white font-bold shadow-md shadow-red-600/30'
+                      : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  {d} 天
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-400">
+            增加天數時系統將自動在「每日行程」預先產生相應天數之空白探索排程卡片；減少天數時則自動修剪多出的天數。
+          </p>
+        </div>
+
         {/* 出發日期選擇器 (彈性核心) */}
         <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-white flex items-center gap-1.5">
               <span>旅行出發首日 (Day 1)</span>
-              <span className="text-[11px] font-normal text-slate-400">(設定後 16 天日期自動連續推算)</span>
+              <span className="text-[11px] font-normal text-slate-400">(設定後 {totalDays} 天日期自動連續推算)</span>
             </label>
             {dateInput && (
               <button
@@ -126,7 +209,7 @@ export const SettingsPage: React.FC = () => {
                 onClick={handleClearDate}
                 className="text-xs text-red-400 hover:underline"
               >
-                清空為相對天數 (Day 1 - 16)
+                清空為相對天數 (Day 1 - {totalDays})
               </button>
             )}
           </div>

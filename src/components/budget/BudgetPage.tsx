@@ -15,7 +15,7 @@ import { convertCurrency, formatMoney, calculateGermanTaxRefund } from '../../ut
 import type { ExpenseCategory } from '../../types';
 
 export const BudgetPage: React.FC = () => {
-  const { expenses, addExpense, deleteExpense, config } = useTripStore();
+  const { expenses, addExpense, deleteExpense, config, itinerary } = useTripStore();
   const { displayCurrency, setDisplayCurrency } = useUIStore();
 
   // 新增記帳表單狀態
@@ -232,7 +232,7 @@ export const BudgetPage: React.FC = () => {
                   onChange={(e) => setDayNumber(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-red-500"
                 >
-                  {Array.from({ length: config.totalDays || 16 }).map((_, i) => (
+                  {Array.from({ length: config.totalDays || itinerary.length || 1 }).map((_, i) => (
                     <option key={i + 1} value={i + 1}>
                       Day {i + 1}
                     </option>

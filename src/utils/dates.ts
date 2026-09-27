@@ -29,7 +29,10 @@ export function formatDayDate(
 /**
  * 計算距離旅行開始的倒數天數
  */
-export function getDaysUntilTrip(startDate: string | null | undefined): {
+export function getDaysUntilTrip(
+  startDate: string | null | undefined,
+  totalDays: number = 16
+): {
   days: number;
   status: 'upcoming' | 'ongoing' | 'passed' | 'unset';
   text: string;
@@ -48,7 +51,7 @@ export function getDaysUntilTrip(startDate: string | null | undefined): {
 
     if (diff > 0) {
       return { days: diff, status: 'upcoming', text: `倒數 ${diff} 天出發` };
-    } else if (diff >= -16 && diff <= 0) {
+    } else if (diff >= -totalDays && diff <= 0) {
       return { days: Math.abs(diff) + 1, status: 'ongoing', text: `行程進行中 (第 ${Math.abs(diff) + 1} 天)` };
     } else {
       return { days: Math.abs(diff), status: 'passed', text: `旅行已圓滿完成` };

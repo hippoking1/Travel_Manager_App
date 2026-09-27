@@ -28,7 +28,7 @@ const MapCenterController: React.FC<{ targetCoords: [number, number] | null }> =
 
 export const MapPage: React.FC = () => {
   const navigate = useNavigate();
-  const { locations } = useTripStore();
+  const { locations, config } = useTripStore();
   const { toggleDayExpanded, setSelectedBaseId } = useUIStore();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -55,7 +55,7 @@ export const MapPage: React.FC = () => {
       <div className="mb-4">
         <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
           <MapPinIcon className="w-6 h-6 text-red-500" />
-          <span>瑞士 16 天地理探索互動地圖</span>
+          <span>{config.tripName} 地理探索互動地圖</span>
         </h1>
         <p className="text-xs sm:text-sm text-slate-400">
           收錄 4 大基地木屋、Stoos最陡纜車、First懸崖、馬特洪冰川天堂(3883m)與德瑞跨境購物點。

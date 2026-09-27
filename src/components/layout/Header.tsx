@@ -17,8 +17,9 @@ import { getDaysUntilTrip } from '../../utils/dates';
 import { SyncIndicator } from '../shared/SyncIndicator';
 
 export const Header: React.FC = () => {
-  const { config } = useTripStore();
-  const countdown = getDaysUntilTrip(config.startDate);
+  const { config, itinerary } = useTripStore();
+  const totalDays = config.totalDays || itinerary.length || 16;
+  const countdown = getDaysUntilTrip(config.startDate, totalDays);
 
   const navItems = [
     { to: '/', label: '每日行程', icon: CalendarDays },
