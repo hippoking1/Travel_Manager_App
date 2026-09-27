@@ -8,7 +8,9 @@ import type {
   ChecklistItem,
   TimeBlock,
   AccommodationBooking,
-  TransportBooking
+  TransportBooking,
+  TripPlan,
+  CreateTripParams
 } from '../types';
 import { DEMO_ITINERARY } from '../data/demo-itinerary';
 import { DEMO_LOCATIONS } from '../data/demo-locations';
@@ -19,6 +21,15 @@ import { syncManager } from '../services/syncManager';
 import { fetchFromSheet, isGasConfigured } from '../services/sheetApi';
 
 export interface TripStoreState {
+  // 多場旅遊計畫管理 (Multi-Trip Management)
+  trips: TripPlan[];
+  activeTripId: string;
+  switchTrip: (tripId: string) => void;
+  createTrip: (params: CreateTripParams) => string;
+  deleteTrip: (tripId: string) => void;
+  duplicateTrip: (tripId: string) => void;
+
+  // 當前活躍旅程之狀態 (向下相容既有頁面與模組)
   config: TripConfig;
   itinerary: DayItinerary[];
   locations: MapLocation[];
@@ -118,44 +129,315 @@ const INITIAL_CONFIG: TripConfig = {
   currencies: DEFAULT_CURRENCY_CONFIG,
 };
 
+const DEFAULT_DEMO_EXPENSES: ExpenseRecord[] = [
+  {
+    id: 'exp-demo-1',
+    timestamp: new Date().toISOString(),
+    dayNumber: 1,
+    category: 'food',
+    amount: 48.5,
+    currency: 'CHF',
+    note: '盧塞恩車站 Coop 採買全家第一晚自煮食材',
+    paidBy: '媽媽',
+  },
+  {
+    id: 'exp-demo-2',
+    timestamp: new Date().toISOString(),
+    dayNumber: 3,
+    category: 'activity',
+    amount: 156.0,
+    currency: 'CHF',
+    note: '皮拉圖斯山齒軌與纜車票 (4位成人 STP 半價，兒童持家庭卡免費)',
+    paidBy: '爸爸',
+  },
+];
+
+export const DEFAULT_SWISS_TRIP_ID = 'trip_swiss_2027';
+
+export const INITIAL_SWISS_TRIP: TripPlan = {
+  id: DEFAULT_SWISS_TRIP_ID,
+  name: 'Swiss Family Odyssey 2027',
+  destination: '瑞士 (Switzerland)',
+  coverEmoji: '🇨🇭',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: new Date().toISOString(),
+  config: INITIAL_CONFIG,
+  itinerary: DEMO_ITINERARY,
+  locations: DEMO_LOCATIONS,
+  expenses: DEFAULT_DEMO_EXPENSES,
+  checklist: DEFAULT_CHECKLIST,
+  accommodations: DEMO_ACCOMMODATIONS,
+  transports: DEMO_TRANSPORTS,
+  bookmarks: ['loc-stoos', 'loc-first', 'loc-glacier-paradise', 'loc-gornergrat', 'loc-jestetten-dm'],
+};
+
+function syncActiveTrip(
+  trips: TripPlan[],
+  activeTripId: string,
+  partial: Partial<TripPlan>
+): TripPlan[] {
+  return trips.map((t) =>
+    t.id === activeTripId
+      ? { ...t, ...partial, updatedAt: new Date().toISOString() }
+      : t
+  );
+}
+
 export const useTripStore = create<TripStoreState>()(
   persist(
     (set) => ({
+      // 多場旅程管理
+      trips: [INITIAL_SWISS_TRIP],
+      activeTripId: DEFAULT_SWISS_TRIP_ID,
+
+      // 當前活躍旅程狀態
       config: INITIAL_CONFIG,
       itinerary: DEMO_ITINERARY,
       locations: DEMO_LOCATIONS,
-      expenses: [
-        {
-          id: 'exp-demo-1',
-          timestamp: new Date().toISOString(),
-          dayNumber: 1,
-          category: 'food',
-          amount: 48.5,
-          currency: 'CHF',
-          note: '盧塞恩車站 Coop 採買全家第一晚自煮食材',
-          paidBy: '媽媽',
-        },
-        {
-          id: 'exp-demo-2',
-          timestamp: new Date().toISOString(),
-          dayNumber: 3,
-          category: 'activity',
-          amount: 156.0,
-          currency: 'CHF',
-          note: '皮拉圖斯山齒軌與纜車票 (4位成人 STP 半價，兒童持家庭卡免費)',
-          paidBy: '爸爸',
-        },
-      ],
+      expenses: DEFAULT_DEMO_EXPENSES,
       checklist: DEFAULT_CHECKLIST,
       accommodations: DEMO_ACCOMMODATIONS,
       transports: DEMO_TRANSPORTS,
       bookmarks: ['loc-stoos', 'loc-first', 'loc-glacier-paradise', 'loc-gornergrat', 'loc-jestetten-dm'],
       isFetchingRemote: false,
 
+      // 多場旅程 Actions
+      switchTrip: (tripId) => {
+        set((state) => {
+          if (state.activeTripId === tripId) return state;
+
+          const currentSnapshot: Partial<TripPlan> = {
+            config: state.config,
+            itinerary: state.itinerary,
+            locations: state.locations,
+            expenses: state.expenses,
+            checklist: state.checklist,
+            accommodations: state.accommodations,
+            transports: state.transports,
+            bookmarks: state.bookmarks,
+          };
+          const updatedTrips = syncActiveTrip(state.trips, state.activeTripId, currentSnapshot);
+          const target = updatedTrips.find((t) => t.id === tripId);
+          if (!target) return state;
+
+          return {
+            trips: updatedTrips,
+            activeTripId: target.id,
+            config: target.config,
+            itinerary: target.itinerary,
+            locations: target.locations || [],
+            expenses: target.expenses || [],
+            checklist: target.checklist || DEFAULT_CHECKLIST,
+            accommodations: target.accommodations || [],
+            transports: target.transports || [],
+            bookmarks: target.bookmarks || [],
+          };
+        });
+      },
+
+      createTrip: (params) => {
+        const newId = `trip_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        let newTrip: TripPlan;
+
+        if (params.template === 'swiss-demo') {
+          newTrip = {
+            id: newId,
+            name: params.name.trim() || '瑞士經典範本行程',
+            destination: params.destination?.trim() || '瑞士 (Switzerland)',
+            coverEmoji: params.coverEmoji || '🇨🇭',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            config: {
+              ...INITIAL_CONFIG,
+              tripName: params.name.trim() || '瑞士經典範本行程',
+              startDate: params.startDate || INITIAL_CONFIG.startDate,
+              totalDays: params.totalDays || 16,
+            },
+            itinerary: DEMO_ITINERARY,
+            locations: DEMO_LOCATIONS,
+            expenses: [],
+            checklist: DEFAULT_CHECKLIST.map((item) => ({ ...item, checked: false })),
+            accommodations: DEMO_ACCOMMODATIONS,
+            transports: DEMO_TRANSPORTS,
+            bookmarks: [],
+          };
+        } else {
+          const days = params.totalDays || 5;
+          const blankItinerary: DayItinerary[] = [];
+          for (let d = 1; d <= days; d++) {
+            blankItinerary.push({
+              day: d,
+              baseId: 'base-main',
+              title: `第 ${d} 天 精彩探索日程`,
+              subtitle: '點擊此卡片可編輯標題、新增景點時段與交通安排',
+              highlights: ['自由探索', '悠閒慢活'],
+              timeBlocks: [
+                {
+                  period: 'morning',
+                  periodLabel: '上午 09:00 - 12:00',
+                  title: '晨間出發與探索',
+                  description: '點擊此活動以填寫您規劃的景點、交通方式或美食。',
+                  tags: ['senior-friendly'],
+                },
+              ],
+              foodNotes: [
+                {
+                  meal: 'lunch',
+                  mealLabel: '午餐',
+                  suggestion: '自選當地景觀餐廳或輕食野餐',
+                  type: 'restaurant',
+                  costEstimate: '依當地消費預算',
+                },
+              ],
+              supermarketTips: ['查詢附近最近之超市或便利店'],
+            });
+          }
+
+          const blankConfig: TripConfig = {
+            tripName: params.name.trim() || '新自訂旅遊計畫',
+            subtitle: params.destination ? `${params.destination} 深度慢遊` : '自由行自訂行程',
+            startDate: params.startDate || null,
+            totalDays: days,
+            travelers: [
+              { id: 't1', name: '自己 / 主揪', role: 'adult', roleLabel: '成人', age: 35, tags: ['senior-friendly'] },
+            ],
+            bases: [
+              {
+                id: 'base-main',
+                name: 'Main Base',
+                nameZh: '主要市區住宿',
+                days: Array.from({ length: days }, (_, i) => i + 1),
+                color: '#0EA5E9',
+                hotelName: '預定市區飯店 / 公寓',
+                notes: '交通便利之中心點',
+              },
+            ],
+            currencies: DEFAULT_CURRENCY_CONFIG,
+          };
+
+          newTrip = {
+            id: newId,
+            name: params.name.trim() || '新自訂旅遊計畫',
+            destination: params.destination?.trim() || '自由行目的地',
+            coverEmoji: params.coverEmoji || '✈️',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            config: blankConfig,
+            itinerary: blankItinerary,
+            locations: [],
+            expenses: [],
+            checklist: DEFAULT_CHECKLIST.map((item) => ({ ...item, checked: false })),
+            accommodations: [],
+            transports: [],
+            bookmarks: [],
+          };
+        }
+
+        set((state) => {
+          const currentSnapshot: Partial<TripPlan> = {
+            config: state.config,
+            itinerary: state.itinerary,
+            locations: state.locations,
+            expenses: state.expenses,
+            checklist: state.checklist,
+            accommodations: state.accommodations,
+            transports: state.transports,
+            bookmarks: state.bookmarks,
+          };
+          const updatedTrips = syncActiveTrip(state.trips, state.activeTripId, currentSnapshot);
+
+          return {
+            trips: [...updatedTrips, newTrip],
+            activeTripId: newTrip.id,
+            config: newTrip.config,
+            itinerary: newTrip.itinerary,
+            locations: newTrip.locations,
+            expenses: newTrip.expenses,
+            checklist: newTrip.checklist,
+            accommodations: newTrip.accommodations,
+            transports: newTrip.transports,
+            bookmarks: newTrip.bookmarks,
+          };
+        });
+
+        return newId;
+      },
+
+      deleteTrip: (tripId) => {
+        set((state) => {
+          if (state.trips.length <= 1) {
+            alert('至少需保留一場旅遊計畫，無法刪除最後一場！');
+            return state;
+          }
+          const remaining = state.trips.filter((t) => t.id !== tripId);
+          if (state.activeTripId === tripId) {
+            const nextActive = remaining[0];
+            return {
+              trips: remaining,
+              activeTripId: nextActive.id,
+              config: nextActive.config,
+              itinerary: nextActive.itinerary,
+              locations: nextActive.locations || [],
+              expenses: nextActive.expenses || [],
+              checklist: nextActive.checklist || DEFAULT_CHECKLIST,
+              accommodations: nextActive.accommodations || [],
+              transports: nextActive.transports || [],
+              bookmarks: nextActive.bookmarks || [],
+            };
+          }
+          return { trips: remaining };
+        });
+      },
+
+      duplicateTrip: (tripId) => {
+        set((state) => {
+          const src = state.trips.find((t) => t.id === tripId) || {
+            id: tripId,
+            name: state.config.tripName,
+            destination: '瑞士 (Switzerland)',
+            coverEmoji: '🇨🇭',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            config: state.config,
+            itinerary: state.itinerary,
+            locations: state.locations,
+            expenses: state.expenses,
+            checklist: state.checklist,
+            accommodations: state.accommodations,
+            transports: state.transports,
+            bookmarks: state.bookmarks,
+          };
+
+          const newId = `trip_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          const copyTrip: TripPlan = {
+            ...src,
+            id: newId,
+            name: `${src.name} (副本)`,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            config: {
+              ...src.config,
+              tripName: `${src.config.tripName} (副本)`,
+            },
+          };
+
+          return {
+            trips: [...state.trips, copyTrip],
+          };
+        });
+      },
+
       updateConfig: (partial) => {
-        set((state) => ({
-          config: { ...state.config, ...partial },
-        }));
+        set((state) => {
+          const nextConfig = { ...state.config, ...partial };
+          return {
+            config: nextConfig,
+            trips: syncActiveTrip(state.trips, state.activeTripId, {
+              config: nextConfig,
+              name: nextConfig.tripName || undefined,
+            }),
+          };
+        });
       },
 
       setStartDate: (dateStr) => {
@@ -604,8 +886,10 @@ export const useTripStore = create<TripStoreState>()(
       },
     }),
     {
-      name: 'swiss-odyssey-2027-store-v2',
+      name: 'travel-planner-store-v3',
       partialize: (state) => ({
+        trips: state.trips,
+        activeTripId: state.activeTripId,
         config: state.config,
         itinerary: state.itinerary,
         expenses: state.expenses,
@@ -613,7 +897,56 @@ export const useTripStore = create<TripStoreState>()(
         accommodations: state.accommodations,
         transports: state.transports,
         bookmarks: state.bookmarks,
+        locations: state.locations,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        try {
+          if (!state.trips || state.trips.length === 0) {
+            const oldRaw = localStorage.getItem('swiss-odyssey-2027-store-v2');
+            let initialTrip = INITIAL_SWISS_TRIP;
+            if (oldRaw) {
+              const oldParsed = JSON.parse(oldRaw);
+              if (oldParsed && oldParsed.state) {
+                const s = oldParsed.state;
+                initialTrip = {
+                  id: DEFAULT_SWISS_TRIP_ID,
+                  name: s.config?.tripName || 'Swiss Family Odyssey 2027',
+                  destination: '瑞士 (Switzerland)',
+                  coverEmoji: '🇨🇭',
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  config: s.config || INITIAL_CONFIG,
+                  itinerary: s.itinerary || DEMO_ITINERARY,
+                  locations: s.locations || DEMO_LOCATIONS,
+                  expenses: s.expenses || DEFAULT_DEMO_EXPENSES,
+                  checklist: s.checklist || DEFAULT_CHECKLIST,
+                  accommodations: s.accommodations || DEMO_ACCOMMODATIONS,
+                  transports: s.transports || DEMO_TRANSPORTS,
+                  bookmarks: s.bookmarks || [],
+                };
+              }
+            }
+            state.trips = [initialTrip];
+            state.activeTripId = initialTrip.id;
+            state.config = initialTrip.config;
+            state.itinerary = initialTrip.itinerary;
+            state.expenses = initialTrip.expenses;
+            state.checklist = initialTrip.checklist;
+            state.accommodations = initialTrip.accommodations;
+            state.transports = initialTrip.transports;
+            state.bookmarks = initialTrip.bookmarks;
+            state.locations = initialTrip.locations;
+          } else {
+            const active = state.trips.find((t) => t.id === state.activeTripId);
+            if (!active) {
+              state.activeTripId = state.trips[0].id;
+            }
+          }
+        } catch (e) {
+          console.error('Rehydrate migration error:', e);
+        }
+      },
     }
   )
 );

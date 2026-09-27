@@ -10,11 +10,13 @@ import {
   Mountain, 
   Settings, 
   Printer, 
-  Clock 
+  Clock,
+  Compass
 } from 'lucide-react';
 import { useTripStore } from '../../stores/tripStore';
 import { getDaysUntilTrip } from '../../utils/dates';
 import { SyncIndicator } from '../shared/SyncIndicator';
+import { TripSwitcher } from '../shared/TripSwitcher';
 
 export const Header: React.FC = () => {
   const { config, itinerary } = useTripStore();
@@ -26,9 +28,9 @@ export const Header: React.FC = () => {
     { to: '/bookings', label: '住宿交通', icon: Building2 },
     { to: '/checklist', label: '準備清單', icon: CheckSquare },
     { to: '/map', label: '地理地圖', icon: MapPin },
-    { to: '/budget', label: '預算與 STP', icon: Wallet },
-    { to: '/weather', label: '天氣安全', icon: CloudSun },
-    { to: '/matterhorn', label: '馬特洪日出', icon: Mountain },
+    { to: '/budget', label: '預算記帳', icon: Wallet },
+    { to: '/weather', label: '天氣穿搭', icon: CloudSun },
+    { to: '/matterhorn', label: '特色日出', icon: Mountain },
     { to: '/settings', label: '設定', icon: Settings },
   ];
 
@@ -40,25 +42,30 @@ export const Header: React.FC = () => {
     <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 shadow-lg no-print">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* 左側：品牌 Logo 與標題 */}
-          <Link to="/" className="flex items-center gap-2.5 sm:gap-3 group shrink-0">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-600/30 group-hover:scale-105 transition-transform">
-              <span className="text-white text-base sm:text-lg font-bold">🇨🇭</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="font-bold text-sm sm:text-base text-white tracking-tight">
-                  Swiss Family Odyssey
-                </span>
-                <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold">
-                  2027
-                </span>
+          {/* 左側：品牌 Logo 與標題 + 多旅程切換器 */}
+          <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
+            <Link to="/" className="flex items-center gap-2 sm:gap-2.5 group shrink-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-red-600 via-rose-600 to-red-700 flex items-center justify-center shadow-lg shadow-red-600/30 group-hover:scale-105 transition-transform text-white">
+                <Compass className="w-5 h-5" />
               </div>
-              <p className="text-[11px] text-slate-400 hidden xl:block truncate max-w-xs">
-                {config.subtitle || '16 天多代家庭慢遊指南'}
-              </p>
-            </div>
-          </Link>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-black text-sm sm:text-base text-white tracking-tight">
+                    旅遊規劃助手
+                  </span>
+                  <span className="bg-sky-500/20 text-sky-400 border border-sky-500/30 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold hidden sm:inline">
+                    PRO
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 hidden 2xl:block truncate max-w-[150px]">
+                  多場旅遊自由行管理
+                </p>
+              </div>
+            </Link>
+
+            {/* 多場旅遊切換器 */}
+            <TripSwitcher />
+          </div>
 
           {/* 中間：PC/平板 導航列 */}
           <nav className="hidden lg:flex items-center space-x-0.5 xl:space-x-1">

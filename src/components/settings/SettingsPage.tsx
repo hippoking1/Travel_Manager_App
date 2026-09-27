@@ -1,21 +1,51 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Settings, 
   Calendar, 
   Cloud, 
   Save, 
   CheckCircle2, 
-  ExternalLink 
+  ExternalLink,
+  Plus,
+  Trash2,
+  Copy,
+  Check,
+  Compass,
+  MapPin
 } from 'lucide-react';
 import { useTripStore } from '../../stores/tripStore';
+import { NewTripModal } from '../shared/NewTripModal';
 
 export const SettingsPage: React.FC = () => {
-  const { config, itinerary, updateConfig, setStartDate, setTotalDays, fetchLatestFromSheets, isFetchingRemote } = useTripStore();
+  const { 
+    config, 
+    itinerary, 
+    trips, 
+    activeTripId, 
+    switchTrip, 
+    deleteTrip, 
+    duplicateTrip, 
+    updateConfig, 
+    setStartDate, 
+    setTotalDays, 
+    fetchLatestFromSheets, 
+    isFetchingRemote 
+  } = useTripStore();
+
+  const [showNewTripModal, setShowNewTripModal] = useState(false);
 
   const [tripName, setTripName] = useState(config.tripName);
   const [subtitle, setSubtitle] = useState(config.subtitle);
   const [totalDays, setTotalDaysState] = useState(config.totalDays || itinerary.length || 16);
   const [dateInput, setDateInput] = useState(config.startDate || '');
+  
+  // 切換旅程時同步表單狀態
+  useEffect(() => {
+    setTripName(config.tripName);
+    setSubtitle(config.subtitle);
+    setTotalDaysState(config.totalDays || itinerary.length || 16);
+    setDateInput(config.startDate || '');
+  }, [activeTripId, config, itinerary.length]);
   
   // 匯率
   const [chfTwd, setChfTwd] = useState(String(config.currencies.rates.CHF_TWD || 36.5));
@@ -84,18 +114,142 @@ export const SettingsPage: React.FC = () => {
       <div>
         <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
           <Settings className="w-6 h-6 text-slate-400" />
-          <span>旅行彈性設定與 Google Sheets 雲端連線</span>
+          <span>旅行設定與多場計畫管理</span>
         </h1>
         <p className="text-xs sm:text-sm text-slate-400">
-          自訂出發日期、修改旅行標題、微調即時匯率，並綁定專屬的 Google 試算表免伺服器資料庫。
+          切換不同旅遊計畫、自由調整出發日與匯率，並綁定專屬 Google 試算表雲端資料庫。
         </p>
       </div>
 
-      {/* 區塊 1: 基本旅行設定與出發日期 (彈性日期核心) */}
+      {/* 區塊 0: 我的旅遊計畫管理 (多場旅遊自由規劃) */}
+      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Compass className="w-5 h-5 text-red-500" />
+              <span>我的旅遊計畫管理 (共 {trips.length} 場)</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              此 App 支援建立與存放多場國內外旅行。點擊「切換使用」即可切換當前活躍規劃。
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowNewTripModal(true)}
+            className="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 rounded-xl text-xs sm:text-sm transition-colors shadow-lg shadow-red-600/30 flex items-center gap-1.5 self-start sm:self-auto shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>建立全新旅遊計畫</span>
+          </button>
+        </div>
+
+        {/* 旅程卡片網格 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+          {trips.map((trip) => {
+            const isActive = trip.id === activeTripId;
+            const daysCount = trip.config?.totalDays || trip.itinerary?.length || 1;
+            return (
+              <div
+                key={trip.id}
+                className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                  isActive
+                    ? 'bg-slate-950/90 border-emerald-500/60 ring-1 ring-emerald-500/30 shadow-lg'
+                    : 'bg-slate-950/50 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="text-2xl p-2 rounded-xl bg-slate-900 border border-slate-800 shrink-0">
+                      {trip.coverEmoji || '✈️'}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-white truncate">
+                          {trip.name}
+                        </h4>
+                      </div>
+                      <div className="text-xs text-slate-400 flex items-center gap-2 mt-1">
+                        {trip.destination && (
+                          <span className="truncate flex items-center gap-0.5 text-slate-300">
+                            <MapPin className="w-3 h-3 text-red-400 shrink-0" />
+                            <span>{trip.destination}</span>
+                          </span>
+                        )}
+                        <span>•</span>
+                        <span className="font-mono text-white font-semibold">{daysCount} 天</span>
+                      </div>
+                      {trip.config?.startDate && (
+                        <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                          首日：{trip.config.startDate}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {isActive && (
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0 flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      <span>使用中</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* 操作按鈕列 */}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    {!isActive ? (
+                      <button
+                        type="button"
+                        onClick={() => switchTrip(trip.id)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-400 hover:text-sky-300 font-semibold transition-colors text-xs"
+                      >
+                        切換至此旅程
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-emerald-400 font-medium">
+                        目前正在規劃此行程
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => duplicateTrip(trip.id)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                      title="複製此旅程建立副本"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+
+                    {trips.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`確定要刪除「${trip.name}」這場旅遊計畫嗎？此動作無法復原。`)) {
+                            deleteTrip(trip.id);
+                          }
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                        title="刪除此旅程"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 區塊 1: 當前旅程基本設定與出發日期 (彈性日期核心) */}
       <form onSubmit={handleSaveGeneral} className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
         <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
           <Calendar className="w-5 h-5 text-red-500" />
-          <span>旅行核心基本設定 (彈性適用任何行程)</span>
+          <span>當前旅程基本設定 ({config.tripName})</span>
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -359,6 +513,12 @@ export const SettingsPage: React.FC = () => {
           </button>
         </div>
       </form>
+
+      {/* 新增旅程彈出視窗 */}
+      <NewTripModal
+        isOpen={showNewTripModal}
+        onClose={() => setShowNewTripModal(false)}
+      />
     </div>
   );
 };

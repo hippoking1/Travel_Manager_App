@@ -310,3 +310,33 @@ export interface SyncStatusState {
   pendingQueueCount: number;
   lastError: string | null;
 }
+
+// ============================================================
+// 多場旅遊計畫管理 (Multi-Trip Management)
+// ============================================================
+
+export interface TripPlan {
+  id: string;                    // 旅程唯一 ID
+  name: string;                  // 旅程名稱 (e.g. "Swiss Family Odyssey 2027", "日本關西賞櫻慢遊")
+  destination: string;           // 目的地國家/地區 (e.g. "瑞士 (Switzerland)", "日本 京都 / 大阪")
+  coverEmoji?: string;           // 代表圖標 (e.g. "🇨🇭", "🇯🇵", "✈️")
+  createdAt: string;
+  updatedAt: string;
+  config: TripConfig;
+  itinerary: DayItinerary[];
+  locations: MapLocation[];
+  expenses: ExpenseRecord[];
+  checklist: ChecklistItem[];
+  accommodations: AccommodationBooking[];
+  transports: TransportBooking[];
+  bookmarks: string[];
+}
+
+export interface CreateTripParams {
+  name: string;
+  destination?: string;
+  coverEmoji?: string;
+  startDate?: string | null;
+  totalDays?: number;
+  template: 'blank' | 'swiss-demo';
+}

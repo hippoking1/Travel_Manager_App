@@ -6,8 +6,9 @@ import { DayCard } from './DayCard';
 import { Users, Info, Sparkles, Plus, RotateCcw } from 'lucide-react';
 
 export const ItineraryPage: React.FC = () => {
-  const { config, itinerary, addDay, resetItineraryToDemo } = useTripStore();
+  const { config, itinerary, trips, activeTripId, addDay, resetItineraryToDemo } = useTripStore();
   const { selectedBaseId, selectedPersona, searchQuery } = useUIStore();
+  const currentTrip = trips.find((t) => t.id === activeTripId);
 
   // 篩選行程邏輯 (支援基地、Persona 標籤、搜尋關鍵字)
   const filteredDays = useMemo(() => {
@@ -54,28 +55,28 @@ export const ItineraryPage: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-      {/* 頂部歡迎 Banner / 三代家庭成員概覽 */}
+      {/* 頂部歡迎 Banner / 旅行概覽 */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-800 mb-6 shadow-2xl relative overflow-hidden">
         <div className="absolute right-0 top-0 w-64 h-64 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xl">🇨🇭</span>
+              <span className="text-xl sm:text-2xl">{currentTrip?.coverEmoji || '✈️'}</span>
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
                 {config.tripName}
               </h1>
             </div>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-xl">
-              專為 7 位家庭成員打造：2 位長輩 (65-70歲)、2 位成人 (40歲)、3 位孩子 (8, 10, 12歲)。兼顧平緩健走、冒險樂園、自煮與景觀列車。
+              {config.subtitle || '深度探索與自由行行程規劃'}
             </p>
           </div>
 
-          {/* 家庭陣容快速標籤 */}
+          {/* 旅程快速統計標籤 */}
           <div className="flex items-center gap-2 flex-wrap">
             <div className="bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 text-slate-200">
               <Users className="w-4 h-4 text-emerald-400" />
-              <span>7 位家庭成員</span>
+              <span>{config.travelers?.length || 1} 位同行旅伴</span>
             </div>
             <div className="bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 text-slate-200">
               <Sparkles className="w-4 h-4 text-amber-400" />
@@ -85,18 +86,20 @@ export const ItineraryPage: React.FC = () => {
         </div>
 
         {/* 成員小膠囊列 */}
-        <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-xs text-slate-400">
-          <span className="font-semibold text-slate-300 shrink-0">同行旅伴：</span>
-          {config.travelers.map((t) => (
-            <span
-              key={t.id}
-              className="bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/40 text-slate-300 shrink-0"
-              title={t.notes}
-            >
-              {t.name} ({t.roleLabel})
-            </span>
-          ))}
-        </div>
+        {config.travelers && config.travelers.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-xs text-slate-400">
+            <span className="font-semibold text-slate-300 shrink-0">同行旅伴：</span>
+            {config.travelers.map((t) => (
+              <span
+                key={t.id}
+                className="bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/40 text-slate-300 shrink-0"
+                title={t.notes}
+              >
+                {t.name} ({t.roleLabel})
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 互動篩選控制列 */}
