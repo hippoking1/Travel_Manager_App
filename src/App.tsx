@@ -3,8 +3,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { ItineraryPage } from './components/itinerary/ItineraryPage';
 import { MapPage } from './components/map/MapPage';
+import { BookingsPage } from './components/bookings/BookingsPage';
 import { BudgetPage } from './components/budget/BudgetPage';
 import { WeatherPage } from './components/weather/WeatherPage';
+import { ChecklistPage } from './components/checklist/ChecklistPage';
 import { MatterhornPage } from './components/special/MatterhornPage';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { useTripStore } from './stores/tripStore';
@@ -22,6 +24,8 @@ export const App: React.FC = () => {
       <AppShell>
         <Routes>
           <Route path="/" element={<ItineraryPage />} />
+          <Route path="/bookings" element={<BookingsPage />} />
+          <Route path="/checklist" element={<ChecklistPage />} />
           <Route path="/map" element={<MapPage />} />
           <Route path="/budget" element={<BudgetPage />} />
           <Route path="/weather" element={<WeatherPage />} />

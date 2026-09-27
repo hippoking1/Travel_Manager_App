@@ -8,7 +8,9 @@ import {
   AlertCircle, 
   CheckCircle2, 
   Mountain,
-  Compass
+  Compass,
+  Edit2,
+  Trash2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { TimeBlock, TransportDetail, STPCoverage } from '../../types';
@@ -16,9 +18,15 @@ import { PersonaBadge } from '../shared/PersonaBadge';
 
 interface TimeBlockCardProps {
   block: TimeBlock;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
-export const TimeBlockCard: React.FC<TimeBlockCardProps> = ({ block }) => {
+export const TimeBlockCard: React.FC<TimeBlockCardProps> = ({ 
+  block, 
+  onEdit, 
+  onDelete 
+}) => {
   const navigate = useNavigate();
 
   const getTransportIcon = (type?: TransportDetail['type']) => {
@@ -66,8 +74,8 @@ export const TimeBlockCard: React.FC<TimeBlockCardProps> = ({ block }) => {
   };
 
   return (
-    <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-800/80 hover:border-slate-700 transition-all space-y-3">
-      {/* 頂部：時段標籤 + 標題 + 海拔標示 */}
+    <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-800/80 hover:border-slate-700 transition-all space-y-3 group">
+      {/* 頂部：時段標籤 + 標題 + 海拔標示 + 編輯/刪除按鈕 */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-800 text-sky-400 border border-slate-700">
@@ -78,13 +86,35 @@ export const TimeBlockCard: React.FC<TimeBlockCardProps> = ({ block }) => {
           </h4>
         </div>
 
-        {/* 海拔高度標籤 */}
-        {block.altitude && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono font-medium bg-slate-800 text-slate-300 border border-slate-700">
-            <Compass className="w-3.5 h-3.5 text-cyan-400" />
-            <span>{block.altitude.toLocaleString()} m</span>
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {/* 海拔高度標籤 */}
+          {block.altitude && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono font-medium bg-slate-800 text-slate-300 border border-slate-700">
+              <Compass className="w-3.5 h-3.5 text-cyan-400" />
+              <span>{block.altitude.toLocaleString()} m</span>
+            </span>
+          )}
+
+          {/* 自由編輯與刪除按鈕 */}
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              className="p-1 rounded bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+              title="自由編輯此活動"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              className="p-1 rounded bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-colors"
+              title="刪除此活動"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 內文描述 */}

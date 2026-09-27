@@ -102,7 +102,8 @@ export type TransportType =
   | 'boat' 
   | 'bus' 
   | 'walk' 
-  | 'car';
+  | 'car'
+  | 'flight';
 
 export type STPCoverage = 'free' | 'half-price' | 'not-covered';
 
@@ -118,6 +119,7 @@ export interface TransportDetail {
 }
 
 export interface TimeBlock {
+  id?: string;
   period: 'morning' | 'afternoon' | 'evening';
   periodLabel: string;         // "上午 08:30 - 12:00"
   title: string;
@@ -151,6 +153,64 @@ export interface DayItinerary {
   supermarketTips?: string[];
   weatherAlert?: string;
   packingReminders?: string[];
+  customNotes?: string;        // 自由備註筆記
+}
+
+// ============================================================
+// 住宿預訂與須知管理 (Accommodation Bookings)
+// ============================================================
+
+export interface AccommodationBooking {
+  id: string;
+  baseId: string;              // 所屬基地 (luzern, grindelwald, zermatt, zurich)
+  baseNameZh: string;
+  hotelName: string;
+  roomType: string;            // 房型 (e.g. "景觀家庭雙臥室公寓 (7人入住)")
+  checkInDate: string;         // "2027-06-15"
+  checkOutDate: string;        // "2027-06-19"
+  nights: number;              // 入住晚數
+  bookingPlatform: string;     // Booking.com, Airbnb, 官網
+  confirmationCode: string;    // 訂單編號 / 預約確認號
+  totalPrice: number;
+  currency: string;            // CHF, EUR, TWD
+  paymentStatus: 'paid' | 'pay_at_property' | 'deposit_paid'; // 付款狀態
+  paymentStatusLabel: string;
+  address: string;
+  googleMapsUrl?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  // 重要入住與須知細節
+  checkInTimeNotice: string;   // e.g. "入住 15:00-20:00 / 退房 10:00 前"
+  keyPickupNotice: string;     // e.g. "門口 Keybox 密碼鎖，密碼 4821#"
+  garbageRulesNotice: string;  // e.g. "需使用蘇黎世/瓦萊州專用收費垃圾袋，生鮮垃圾需分開"
+  kitchenRulesNotice: string;  // e.g. "自煮完畢需開啟洗碗機，退房需清空冰箱"
+  notes?: string;              // 其他備忘
+}
+
+// ============================================================
+// 交通安排與訂票乘車須知 (Transport Bookings)
+// ============================================================
+
+export interface TransportBooking {
+  id: string;
+  category: 'flight' | 'scenic_train' | 'mountain_rail' | 'cable_car' | 'ferry' | 'car_rental';
+  categoryLabel: string;
+  title: string;               // e.g. "台北 ➔ 蘇黎世 國際長途直飛航班"
+  routeFrom: string;
+  routeTo: string;
+  departureTime: string;       // e.g. "2027-06-15 08:30"
+  arrivalTime?: string;
+  operatorNumber: string;      // 班次/車次號 (e.g. "BR087", "Glacier Express 902")
+  bookingReference: string;    // 訂位代碼 / PNR / 電子車票號
+  seatsInfo?: string;          // e.g. "車廂 4 / 座位 11, 12, 13, 14, 15, 16, 17"
+  ticketType: string;          // e.g. "STP 免費涵蓋 + 景觀席強制劃位", "個人電子機票"
+  totalPrice?: number;
+  currency?: string;
+  // 重要乘車與搭乘須知
+  platformNotice?: string;     // e.g. "蘇黎世火車站月台 4，提前 15 分鐘候車"
+  luggageNotice?: string;      // e.g. "大件行李置於車廂玄關專屬大行李架，貴重物品隨身"
+  boardingNotice?: string;     // e.g. "需出示護照正本 + STP QR Code + 訂位憑證電子檔"
+  notes?: string;
 }
 
 // ============================================================
@@ -218,9 +278,18 @@ export interface STPRuleItem {
 // 行李與洋蔥式穿搭清單 (Checklist)
 // ============================================================
 
+export type ChecklistCategory = 
+  | 'clothing'     // 洋蔥式穿搭
+  | 'seniors'      // 長輩專屬
+  | 'kids'         // 幼童專屬
+  | 'documents'    // 證件檔案
+  | 'electronics'  // 電子電器
+  | 'medicine'     // 醫藥保健
+  | 'other';       // 其他備忘
+
 export interface ChecklistItem {
   id: string;
-  category: 'clothing' | 'documents' | 'medicine' | 'electronics' | 'kids' | 'seniors';
+  category: ChecklistCategory;
   categoryLabel: string;
   item: string;
   checked: boolean;

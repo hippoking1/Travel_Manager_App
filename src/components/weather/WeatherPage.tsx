@@ -1,22 +1,16 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
   CloudSun, 
   Video, 
   ExternalLink, 
-  CheckSquare, 
-  Square, 
   SunMedium, 
   Layers, 
   HeartHandshake, 
-  Plus 
+  ArrowRight
 } from 'lucide-react';
-import { useTripStore } from '../../stores/tripStore';
+import { Link } from 'react-router-dom';
 
 export const WeatherPage: React.FC = () => {
-  const { checklist, toggleChecklistItem, addChecklistItem } = useTripStore();
-  const [newItemText, setNewItemText] = useState('');
-  const [newItemCat, setNewItemCat] = useState<'clothing' | 'seniors' | 'kids' | 'documents' | 'electronics'>('clothing');
-
   const webcams = [
     {
       name: '馬特洪峰冰川天堂 (Matterhorn Glacier Paradise)',
@@ -62,35 +56,63 @@ export const WeatherPage: React.FC = () => {
     },
   ];
 
-  const handleAddItem = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newItemText.trim()) return;
-
-    addChecklistItem({
-      category: newItemCat,
-      categoryLabel: newItemCat === 'clothing' ? '洋蔥式穿搭' : '行李必備',
-      item: newItemText.trim(),
-      checked: false,
-      priority: 'high',
-    });
-
-    setNewItemText('');
-  };
-
-  const completedCount = checklist.filter((c) => c.checked).length;
-  const progressPercent = checklist.length > 0 ? Math.round((completedCount / checklist.length) * 100) : 0;
+  const layeringGuide = [
+    {
+      layer: '第 1 層：基礎底層 (Base Layer)',
+      purpose: '貼身吸濕排汗、保持乾爽',
+      items: '長袖美利諾羊毛 (Merino Wool) 或機能聚酯纖維發熱衣',
+      suitableAltitude: '0m ~ 3,883m 全海拔通用',
+      tips: '切忌純棉內衣！流汗後棉質變濕冰冷，在高山極易導致長輩與孩童失溫。',
+      color: '#10B981',
+    },
+    {
+      layer: '第 2 層：中層保暖 (Mid Layer)',
+      purpose: '鎖住體溫空氣、隔絕寒氣',
+      items: '刷毛外套 (Fleece) 或超輕量羽絨背心',
+      suitableAltitude: '1,500m ~ 3,000m (策馬特、高山健行)',
+      tips: '健行身體發熱時可直接拉開拉鍊散熱，體感最為靈活自在。',
+      color: '#F59E0B',
+    },
+    {
+      layer: '第 3 層：外層防護 (Outer Shell)',
+      purpose: '全面抵禦高山狂風、冰川暴雨與高空雪水',
+      items: '防風防水 GORE-TEX 外套 (附防風兜帽)',
+      suitableAltitude: '全山區必備 (尤其皮拉圖斯與萊茵瀑布衝浪)',
+      tips: '瑞士山區午後易起霧驟雨，防潑水外套即為最好的防護雨具。',
+      color: '#0EA5E9',
+    },
+    {
+      layer: '第 4 層：極地防寒 (Extreme Cold)',
+      purpose: '抵禦零下嚴寒 (3,883m 冰川世界)',
+      items: '高充絨量羽絨厚大衣、護耳保暖毛帽、防風保暖手套',
+      suitableAltitude: '馬特洪冰川天堂專用 (終年零度以下)',
+      tips: '高山電梯上山僅需 45 分鐘，山下短袖山頂厚雪，一定要在背包備妥！',
+      color: '#8B5CF6',
+    },
+  ];
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
       {/* 標題與簡介 */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-          <CloudSun className="w-6 h-6 text-sky-400" />
-          <span>高海拔與天氣安全中心 (Weather & Safety)</span>
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-400">
-          整合瑞士阿爾卑斯 6 大名峰即時視訊 WebCam、UV 紫外線防護、高山症警訊與洋蔥式穿搭清單。
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+            <CloudSun className="w-6 h-6 text-sky-400" />
+            <span>高海拔與天氣安全中心 (Weather & Safety)</span>
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-400">
+            阿爾卑斯 6 大名峰即時 WebCam、氣象預報、UV 紫外線防護與洋蔥式穿搭科學指南。
+          </p>
+        </div>
+
+        {/* 移出之 Checklist 專屬跳轉連結 (滿足需求 3) */}
+        <Link
+          to="/checklist"
+          className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs sm:text-sm transition-all shadow-lg shadow-emerald-950 shrink-0 self-start sm:self-auto"
+        >
+          <span>查看獨立行李清單</span>
+          <ArrowRight className="w-4 h-4" />
+        </Link>
       </div>
 
       {/* 高海拔安全與 UV 警示卡片 */}
@@ -142,14 +164,12 @@ export const WeatherPage: React.FC = () => {
 
       {/* 6 大名峰即時 WebCam 監控網格 */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Video className="w-5 h-5 text-red-500" />
-              <span>關鍵山峰即時影像與氣象傳送門 (Live WebCams)</span>
-            </h3>
-            <p className="text-xs text-slate-400">出門前 10 分鐘必看！山下陰天山頂往往是壯麗雲海大晴天。</p>
-          </div>
+        <div>
+          <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <Video className="w-5 h-5 text-red-500" />
+            <span>關鍵山峰即時影像與氣象傳送門 (Live WebCams)</span>
+          </h3>
+          <p className="text-xs text-slate-400">出門前 10 分鐘必看！山下陰天山頂往往是壯麗雲海大晴天。</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -189,100 +209,47 @@ export const WeatherPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 洋蔥式穿搭與行李清單打勾區塊 */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      {/* 洋蔥式穿搭分層指南 */}
+      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Layers className="w-5 h-5 text-emerald-400" />
-              <span>洋蔥式穿搭與全家行李清單 (共用雲端打勾)</span>
+              <span>洋蔥式 (Onion Layering) 穿搭科學指南</span>
             </h3>
-            <p className="text-xs text-slate-400">所有打勾狀態自動同步至 Google Sheets，家人隨手確認不漏帶！</p>
+            <p className="text-xs text-slate-400">瑞士一日歷經四季，由平地 25°C 直上山頂 -2°C 的完美穿脫法則。</p>
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-400">準備進度：</span>
-            <span className="font-bold text-emerald-400 font-mono text-sm">{progressPercent}%</span>
-            <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
-              <div
-                style={{ width: `${progressPercent}%` }}
-                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-              />
-            </div>
-          </div>
+          <Link
+            to="/checklist"
+            className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1"
+          >
+            <span>到行李清單打勾 ➔</span>
+          </Link>
         </div>
 
-        {/* 快速新增備品輸入列 */}
-        <form onSubmit={handleAddItem} className="flex flex-col sm:flex-row gap-2">
-          <select
-            value={newItemCat}
-            onChange={(e) => setNewItemCat(e.target.value as any)}
-            className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="clothing">洋蔥式穿搭</option>
-            <option value="seniors">長輩專屬</option>
-            <option value="kids">幼童專屬</option>
-            <option value="documents">證件檔案</option>
-            <option value="electronics">電子電器</option>
-          </select>
-          <input
-            type="text"
-            value={newItemText}
-            onChange={(e) => setNewItemText(e.target.value)}
-            placeholder="新增行李備品（例如：爺爺圍巾、暈車藥、指甲刀）..."
-            className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          />
-          <button
-            type="submit"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors shrink-0 flex items-center justify-center gap-1"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>新增項目</span>
-          </button>
-        </form>
-
-        {/* 項目勾選列表 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[480px] overflow-y-auto pr-1">
-          {checklist.map((item) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {layeringGuide.map((layer, idx) => (
             <div
-              key={item.id}
-              onClick={() => toggleChecklistItem(item.id)}
-              className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-3 select-none ${
-                item.checked
-                  ? 'bg-slate-950/40 border-slate-800/60 opacity-60'
-                  : 'bg-slate-950 border-slate-800 hover:border-slate-700'
-              }`}
+              key={idx}
+              className="bg-slate-950 p-4 rounded-xl border border-slate-800/80 space-y-2"
             >
-              <div className="mt-0.5 text-emerald-400 shrink-0">
-                {item.checked ? (
-                  <CheckSquare className="w-4 h-4 text-emerald-500" />
-                ) : (
-                  <Square className="w-4 h-4 text-slate-500" />
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <span
-                  className={`text-xs font-medium block leading-relaxed ${
-                    item.checked ? 'line-through text-slate-500' : 'text-slate-200'
-                  }`}
-                >
-                  {item.item}
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs sm:text-sm font-bold text-white" style={{ color: layer.color }}>
+                  {layer.layer}
+                </h4>
+                <span className="text-[11px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-900/60">
+                  {layer.suitableAltitude}
                 </span>
-
-                <div className="flex items-center gap-2 mt-1">
-                  {item.altitudeRange && (
-                    <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/50 px-1.5 py-0.5 rounded border border-cyan-900/60">
-                      {item.altitudeRange}
-                    </span>
-                  )}
-                  {item.categoryLabel && (
-                    <span className="text-[10px] text-slate-400">
-                      #{item.categoryLabel}
-                    </span>
-                  )}
-                </div>
               </div>
+
+              <div className="text-xs text-slate-200 font-medium">
+                <strong>推薦備品：</strong>{layer.items}
+              </div>
+
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                💡 <strong>專家小訣竅：</strong>{layer.tips}
+              </p>
             </div>
           ))}
         </div>

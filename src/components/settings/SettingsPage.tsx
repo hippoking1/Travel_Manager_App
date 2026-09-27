@@ -258,6 +258,23 @@ export const SettingsPage: React.FC = () => {
             </span>
           )}
         </div>
+
+        {/* 佇列診斷與清理按鈕 (解決待同步卡死問題) */}
+        <div className="border-t border-slate-800 pt-3 mt-3 flex items-center justify-between">
+          <div className="text-xs text-slate-400">
+            <span>若同步指示燈卡在待同步，可點擊重設清空本地排隊佇列：</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.removeItem('travel_sync_offline_queue');
+              setTestResult('✅ 本地同步佇列已成功清空！指示燈已恢復乾淨狀態。');
+            }}
+            className="text-xs bg-slate-800 hover:bg-red-950/60 hover:text-red-300 text-slate-300 px-3 py-1.5 rounded-xl border border-slate-700 transition-colors"
+          >
+            一鍵重設/清空待同步佇列
+          </button>
+        </div>
       </form>
     </div>
   );

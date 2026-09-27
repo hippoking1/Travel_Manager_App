@@ -2,6 +2,8 @@ import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { 
   CalendarDays, 
+  Building2,
+  CheckSquare,
   MapPin, 
   Wallet, 
   CloudSun, 
@@ -20,11 +22,13 @@ export const Header: React.FC = () => {
 
   const navItems = [
     { to: '/', label: '每日行程', icon: CalendarDays },
+    { to: '/bookings', label: '住宿交通', icon: Building2 },
+    { to: '/checklist', label: '準備清單', icon: CheckSquare },
     { to: '/map', label: '地理地圖', icon: MapPin },
     { to: '/budget', label: '預算與 STP', icon: Wallet },
-    { to: '/weather', label: '天氣與穿搭', icon: CloudSun },
+    { to: '/weather', label: '天氣安全', icon: CloudSun },
     { to: '/matterhorn', label: '馬特洪日出', icon: Mountain },
-    { to: '/settings', label: '行程設定', icon: Settings },
+    { to: '/settings', label: '設定', icon: Settings },
   ];
 
   const handlePrint = () => {
@@ -36,27 +40,27 @@ export const Header: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* 左側：品牌 Logo 與標題 */}
-          <Link to="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-600/30 group-hover:scale-105 transition-transform">
-              <span className="text-white text-lg font-bold">🇨🇭</span>
+          <Link to="/" className="flex items-center gap-2.5 sm:gap-3 group shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-600/30 group-hover:scale-105 transition-transform">
+              <span className="text-white text-base sm:text-lg font-bold">🇨🇭</span>
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-base sm:text-lg text-white tracking-tight">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="font-bold text-sm sm:text-base text-white tracking-tight">
                   Swiss Family Odyssey
                 </span>
                 <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold">
                   2027
                 </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block truncate max-w-xs">
+              <p className="text-[11px] text-slate-400 hidden xl:block truncate max-w-xs">
                 {config.subtitle || '16 天多代家庭慢遊指南'}
               </p>
             </div>
           </Link>
 
           {/* 中間：PC/平板 導航列 */}
-          <nav className="hidden lg:flex items-center space-x-1">
+          <nav className="hidden lg:flex items-center space-x-0.5 xl:space-x-1">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -64,14 +68,14 @@ export const Header: React.FC = () => {
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) =>
-                    `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    `flex items-center gap-1 px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-medium transition-all ${
                       isActive
-                        ? 'bg-red-600 text-white shadow-md shadow-red-600/20'
+                        ? 'bg-red-600 text-white shadow-md shadow-red-600/20 font-bold'
                         : 'text-slate-300 hover:text-white hover:bg-slate-800'
                     }`
                   }
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className="w-3.5 h-3.5 xl:w-4 xl:h-4" />
                   <span>{item.label}</span>
                 </NavLink>
               );
@@ -82,7 +86,7 @@ export const Header: React.FC = () => {
           <div className="flex items-center gap-2 sm:gap-3">
             {/* 倒數標籤 */}
             {config.startDate && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/90 border border-slate-700 text-xs text-slate-200">
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/90 border border-slate-700 text-xs text-slate-200">
                 <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                 <span className="font-semibold text-sky-300">{countdown.text}</span>
               </div>

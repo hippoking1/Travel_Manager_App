@@ -1,19 +1,19 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { CalendarDays, MapPin, Wallet, CloudSun, Mountain } from 'lucide-react';
+import { CalendarDays, Building2, CheckSquare, MapPin, Wallet } from 'lucide-react';
 
 export const MobileNav: React.FC = () => {
   const tabs = [
     { to: '/', label: '行程', icon: CalendarDays },
+    { to: '/bookings', label: '住宿交通', icon: Building2 },
+    { to: '/checklist', label: '清單', icon: CheckSquare },
     { to: '/map', label: '地圖', icon: MapPin },
     { to: '/budget', label: '預算', icon: Wallet },
-    { to: '/weather', label: '天氣裝備', icon: CloudSun },
-    { to: '/matterhorn', label: '日出專區', icon: Mountain },
   ];
 
   return (
     <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 safe-bottom no-print">
-      <nav className="flex items-center justify-around h-14 px-2">
+      <nav className="flex items-center justify-around h-14 px-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           return (

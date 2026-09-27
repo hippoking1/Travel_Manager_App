@@ -1,7 +1,7 @@
 import { mutateSheet, isGasConfigured } from './sheetApi';
 import type { SyncStatusState } from '../types';
 
-interface QueueItem {
+export interface QueueItem {
   id: string;
   timestamp: string;
   sheet: string;
@@ -23,19 +23,28 @@ class SyncManager {
     // 監聽瀏覽器網路恢復連線事件
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => {
-        this.flushQueue();
+        if (isGasConfigured()) {
+          this.flushQueue();
+        }
       });
     }
   }
 
   /** 取得目前未完成同步佇列 */
-  private getQueue(): QueueItem[] {
+  public getQueue(): QueueItem[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       return raw ? JSON.parse(raw) : [];
     } catch {
       return [];
     }
+  }
+
+  /** 一鍵清空所有待同步排隊佇列 (解決卡在待同步問題) */
+  public clearQueue() {
+    localStorage.removeItem(STORAGE_KEY);
+    this.lastError = null;
+    this.notify();
   }
 
   /** 儲存佇列到 LocalStorage */
@@ -50,6 +59,11 @@ class SyncManager {
     action: 'APPEND' | 'UPDATE' | 'DELETE',
     payload: Record<string, unknown>
   ) {
+    // 若未設定雲端，純本機使用，不硬塞入無效隊列造成一直顯示待同步
+    if (!isGasConfigured()) {
+      return;
+    }
+
     const queue = this.getQueue();
     queue.push({
       id: crypto.randomUUID ? crypto.randomUUID() : `sync_${Date.now()}_${Math.random()}`,
@@ -62,7 +76,7 @@ class SyncManager {
     this.saveQueue(queue);
 
     // 觸發同步
-    if (navigator.onLine && isGasConfigured()) {
+    if (navigator.onLine) {
       this.flushQueue();
     }
   }
@@ -72,7 +86,12 @@ class SyncManager {
     if (this.isSyncing) return;
     const queue = this.getQueue();
     if (queue.length === 0) return;
-    if (!isGasConfigured()) return;
+
+    if (!isGasConfigured()) {
+      // 網址無效或未設定，清空無效排隊避免一直卡在待同步
+      this.clearQueue();
+      return;
+    }
 
     this.isSyncing = true;
     this.lastError = null;
@@ -84,12 +103,13 @@ class SyncManager {
       try {
         const res = await mutateSheet(item.sheet, item.action, item.payload);
         if (!res.success) {
-          throw new Error(res.error || '寫入失敗');
+          throw new Error(res.error || 'Google 試算表寫入失敗');
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         this.lastError = msg;
-        if (item.retries < 3) {
+        // 限制最多重試 2 次，避免無效請求持續堆積
+        if (item.retries < 2) {
           remaining.push({ ...item, retries: item.retries + 1 });
         }
       }
@@ -100,6 +120,7 @@ class SyncManager {
 
     if (remaining.length === 0) {
       this.lastSyncedAt = new Date().toISOString();
+      this.lastError = null;
       localStorage.setItem('travel_last_synced_time', this.lastSyncedAt);
     }
 

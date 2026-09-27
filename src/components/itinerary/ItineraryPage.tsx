@@ -3,10 +3,10 @@ import { useTripStore } from '../../stores/tripStore';
 import { useUIStore } from '../../stores/uiStore';
 import { FilterBar } from './FilterBar';
 import { DayCard } from './DayCard';
-import { Users, Info, Sparkles } from 'lucide-react';
+import { Users, Info, Sparkles, Plus, RotateCcw } from 'lucide-react';
 
 export const ItineraryPage: React.FC = () => {
-  const { config, itinerary } = useTripStore();
+  const { config, itinerary, addDay, resetItineraryToDemo } = useTripStore();
   const { selectedBaseId, selectedPersona, searchQuery } = useUIStore();
 
   // 篩選行程邏輯 (支援基地、Persona 標籤、搜尋關鍵字)
@@ -46,6 +46,12 @@ export const ItineraryPage: React.FC = () => {
     });
   }, [itinerary, selectedBaseId, selectedPersona, searchQuery]);
 
+  const handleReset = () => {
+    if (window.confirm('確定要將行程恢復為預設的 16 天瑞士經典行程嗎？自訂的變更將會被覆蓋。')) {
+      resetItineraryToDemo();
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
       {/* 頂部歡迎 Banner / 三代家庭成員概覽 */}
@@ -73,7 +79,7 @@ export const ItineraryPage: React.FC = () => {
             </div>
             <div className="bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 text-slate-200">
               <Sparkles className="w-4 h-4 text-amber-400" />
-              <span>4 大特色基地</span>
+              <span>共 {itinerary.length} 天規劃</span>
             </div>
           </div>
         </div>
@@ -109,10 +115,29 @@ export const ItineraryPage: React.FC = () => {
           <Info className="w-8 h-8 text-slate-500 mx-auto mb-2" />
           <h3 className="text-base font-bold text-white mb-1">找不到相符的行程</h3>
           <p className="text-xs sm:text-sm text-slate-400 max-w-sm mx-auto">
-            嘗試切換基地、重置角色篩選標籤，或清除搜尋關鍵字以查看完整 16 天規劃。
+            嘗試切換基地、重置角色篩選標籤，或清除搜尋關鍵字以查看完整規劃。
           </p>
         </div>
       )}
+
+      {/* 底部自由規劃功能列：新增天數 & 復原按鈕 (需求 2) */}
+      <div className="mt-8 pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <button
+          onClick={() => addDay()}
+          className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold px-6 py-3 rounded-2xl text-sm transition-all shadow-xl shadow-red-950 flex items-center justify-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          <span>自由新增旅遊日程 (Day {itinerary.length + 1})</span>
+        </button>
+
+        <button
+          onClick={handleReset}
+          className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors p-2"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>恢復為 16 天瑞士經典行程</span>
+        </button>
+      </div>
     </div>
   );
 };

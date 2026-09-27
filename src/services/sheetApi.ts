@@ -19,10 +19,17 @@ export function getFamilySecret(): string {
   return SECRET_ENV;
 }
 
-/** 檢查是否已設定雲端同步網址 */
+/** 檢查是否已設定真實且有效的雲端同步網址 */
 export function isGasConfigured(): boolean {
   const url = getGasUrl();
-  return typeof url === 'string' && url.startsWith('https://script.google.com/macros/s/');
+  if (!url || typeof url !== 'string') return false;
+  // 必須是正式 Apps Script exec 格式
+  if (!url.startsWith('https://script.google.com/macros/s/')) return false;
+  // 排除模板範例佔位文字 (防止使用者直接複製範本導致卡死在待同步)
+  if (url.includes('YOUR_SCRIPT_ID') || url.includes('YOUR_DEPLOYMENT_ID') || url.includes('YOUR_')) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -35,20 +42,27 @@ export async function fetchFromSheet<T = unknown>(sheetName?: string): Promise<{
     return { success: false, error: '尚未設定 Google Apps Script Web App URL' };
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000); // 12秒超時保護
+
   try {
     const fullUrl = sheetName ? `${url}?sheet=${encodeURIComponent(sheetName)}` : url;
     const response = await fetch(fullUrl, {
       method: 'GET',
       redirect: 'follow',
+      signal: controller.signal,
     });
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      throw new Error(`HTTP 錯誤碼: ${response.status}`);
+      throw new Error(`HTTP 錯誤碼: ${response.status} (${response.statusText})`);
     }
 
     const json = await response.json();
     return json;
   } catch (err: unknown) {
+    clearTimeout(timeoutId);
     const msg = err instanceof Error ? err.message : String(err);
     return { success: false, error: msg };
   }
@@ -72,6 +86,9 @@ export async function mutateSheet(
     return { success: true };
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超時保護
+
   try {
     const bodyData = JSON.stringify({
       secret,
@@ -87,11 +104,15 @@ export async function mutateSheet(
       },
       body: bodyData,
       redirect: 'follow',
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     const json = await response.json();
     return json;
   } catch (err: unknown) {
+    clearTimeout(timeoutId);
     const msg = err instanceof Error ? err.message : String(err);
     return { success: false, error: msg };
   }
