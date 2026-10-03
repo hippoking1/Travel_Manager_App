@@ -33,6 +33,7 @@ export interface BaseInfo {
   color: string;               // 基地色彩識別 (Hex)
   hotelName: string;           // 住宿飯店/公寓名稱
   hotelAddress?: string;
+  coordinates?: [number, number]; // [lat, lng]
   checkIn?: string;
   checkOut?: string;
   notes?: string;
@@ -119,9 +120,11 @@ export interface TransportDetail {
 }
 
 export interface TimeBlock {
-  id?: string;
+  id?: string;                 // 唯一 ID (儲存中必有，原始資料可選)
   period: 'morning' | 'afternoon' | 'evening';
-  periodLabel: string;         // "上午 08:30 - 12:00"
+  periodLabel?: string;        // 舊版或備用標籤 (e.g. "上午 08:30 - 12:00")
+  startTime?: string;          // 結構化時間 'HH:mm' (e.g. "08:30")
+  endTime?: string;            // 結構化時間 'HH:mm' (e.g. "12:00")
   title: string;
   description: string;
   locationName?: string;
@@ -143,7 +146,8 @@ export interface FoodNote {
 }
 
 export interface DayItinerary {
-  day: number;                 // 1-16
+  id?: string;                 // 穩定 ID (不因排序重排而改變)
+  day: number;                 // 顯示序數 1-N
   baseId: string;              // 對應 BaseInfo.id
   title: string;
   subtitle: string;
@@ -155,6 +159,9 @@ export interface DayItinerary {
   packingReminders?: string[];
   customNotes?: string;        // 自由備註筆記
 }
+
+export type DestinationModule = 'swiss';
+export type ContainerId = string | 'backlog';
 
 // ============================================================
 // 住宿預訂與須知管理 (Accommodation Bookings)
@@ -324,6 +331,8 @@ export interface TripPlan {
   updatedAt: string;
   config: TripConfig;
   itinerary: DayItinerary[];
+  backlog: TimeBlock[];          // 待排景點池 (Backlog)
+  modules: DestinationModule[];  // 啟用的特色模組 (e.g. ['swiss'])
   locations: MapLocation[];
   expenses: ExpenseRecord[];
   checklist: ChecklistItem[];

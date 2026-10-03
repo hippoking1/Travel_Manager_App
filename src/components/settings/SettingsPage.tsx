@@ -1,80 +1,145 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Settings, 
-  Calendar, 
-  Cloud, 
-  Save, 
-  CheckCircle2, 
+import {
+  Calendar,
+  Cloud,
+  Save,
+  CheckCircle2,
   ExternalLink,
   Plus,
   Trash2,
   Copy,
   Check,
   Compass,
-  MapPin
+  MapPin,
+  Users,
+  Home,
+  Coins,
+  Sparkles,
+  Pencil,
+  RefreshCw,
 } from 'lucide-react';
 import { useTripStore } from '../../stores/tripStore';
+import { useActiveTrip } from '../../stores/selectors';
+import { MODULE_REGISTRY } from '../../config/modules';
+import { syncManager } from '../../services/syncManager';
 import { NewTripModal } from '../shared/NewTripModal';
+import { useConfirm } from '../ui/ConfirmDialog';
+import { Card } from '../ui/Card';
+import { Button } from '../ui/Button';
+import { Input, Select } from '../ui/Field';
+import { Modal } from '../ui/Modal';
+import { PageHeader } from '../ui/PageHeader';
+import { EmptyState } from '../ui/EmptyState';
+import type { TravelerProfile, BaseInfo, DestinationModule } from '../../types';
+
+type SettingsTab = 'general' | 'travelers' | 'bases' | 'currencies' | 'sync' | 'trips';
 
 export const SettingsPage: React.FC = () => {
-  const { 
-    config, 
-    itinerary, 
-    trips, 
-    activeTripId, 
-    switchTrip, 
-    deleteTrip, 
-    duplicateTrip, 
-    updateConfig, 
-    setStartDate, 
-    setTotalDays, 
-    fetchLatestFromSheets, 
-    isFetchingRemote 
+  const activeTrip = useActiveTrip();
+  const {
+    config,
+    itinerary,
+    trips,
+    activeTripId,
+    switchTrip,
+    deleteTrip,
+    duplicateTrip,
+    updateConfig,
+    setStartDate,
+    setTotalDays,
+    setModules,
+    fetchLatestFromSheets,
+    isFetchingRemote,
   } = useTripStore();
 
+  const confirm = useConfirm();
+
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [showNewTripModal, setShowNewTripModal] = useState(false);
 
+  // 表單內部狀態
   const [tripName, setTripName] = useState(config.tripName);
   const [subtitle, setSubtitle] = useState(config.subtitle);
   const [totalDays, setTotalDaysState] = useState(config.totalDays || itinerary.length || 16);
   const [dateInput, setDateInput] = useState(config.startDate || '');
-  
-  // 切換旅程時同步表單狀態
+  const [activeModules, setActiveModules] = useState<DestinationModule[]>(activeTrip?.modules || []);
+
+  // 僅當 activeTripId 改變時同步內部表單，避免背景同步覆蓋使用者輸入
   useEffect(() => {
     setTripName(config.tripName);
     setSubtitle(config.subtitle);
     setTotalDaysState(config.totalDays || itinerary.length || 16);
     setDateInput(config.startDate || '');
-  }, [activeTripId, config, itinerary.length]);
-  
+    setActiveModules(activeTrip?.modules || []);
+  }, [activeTripId]);
+
   // 匯率
+  const [primaryCurrency, setPrimaryCurrency] = useState(config.currencies.primary || 'CHF');
   const [chfTwd, setChfTwd] = useState(String(config.currencies.rates.CHF_TWD || 36.5));
   const [eurTwd, setEurTwd] = useState(String(config.currencies.rates.EUR_TWD || 34.2));
 
-  // Google Sheets 連線設定 (支援本機 LocalStorage 隨時切換覆蓋)
+  // Google Sheets 連線設定
   const [gasUrl, setGasUrl] = useState(localStorage.getItem('travel_gas_url') || '');
   const [secret, setSecret] = useState(localStorage.getItem('travel_family_secret') || 'SWISS_ODYSSEY_2027_SECRET');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
-  const handleSaveGeneral = (e: React.FormEvent) => {
+  // 旅伴 Modal 狀態
+  const [editingTraveler, setEditingTraveler] = useState<TravelerProfile | null>(null);
+  const [showTravelerModal, setShowTravelerModal] = useState(false);
+  const [travName, setTravName] = useState('');
+  const [travRole, setTravRole] = useState<'adult' | 'senior' | 'kid'>('adult');
+  const [travAge, setTravAge] = useState(30);
+  const [travRoleLabel, setTravRoleLabel] = useState('成人');
+  const [travNotes, setTravNotes] = useState('');
+
+  // 基地 Modal 狀態
+  const [editingBase, setEditingBase] = useState<BaseInfo | null>(null);
+  const [showBaseModal, setShowBaseModal] = useState(false);
+  const [baseId, setBaseId] = useState('');
+  const [baseName, setBaseName] = useState('');
+  const [baseNameZh, setBaseNameZh] = useState('');
+  const [baseColor, setBaseColor] = useState('#0EA5E9');
+  const [baseHotelName, setBaseHotelName] = useState('');
+  const [baseLat, setBaseLat] = useState('47.0502');
+  const [baseLng, setBaseLng] = useState('8.3093');
+  const [baseNotes, setBaseNotes] = useState('');
+
+  // 儲存基本設定
+  const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (totalDays < itinerary.length) {
-      const confirmReduce = window.confirm(
-        `注意：旅行天數將由 ${itinerary.length} 天縮減為 ${totalDays} 天，第 ${totalDays + 1} 天之後的自訂行程將會被刪除。確定要縮減儲存嗎？`
-      );
-      if (!confirmReduce) return;
+      const ok = await confirm({
+        title: '縮減旅行天數注意',
+        message: `旅行天數將由 ${itinerary.length} 天縮減為 ${totalDays} 天，第 ${totalDays + 1} 天之後的自訂排程將會被修剪。確定要儲存嗎？`,
+        confirmLabel: '確認縮減天數',
+        danger: true,
+      });
+      if (!ok) return;
     }
 
     setTotalDays(totalDays);
+    setStartDate(dateInput.trim() ? dateInput.trim() : null);
+    setModules(activeModules);
 
     updateConfig({
       tripName: tripName.trim(),
       subtitle: subtitle.trim(),
       totalDays: totalDays,
+    });
+
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 2500);
+  };
+
+  // 儲存匯率設定
+  const handleSaveCurrencies = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateConfig({
       currencies: {
         ...config.currencies,
+        primary: primaryCurrency,
         rates: {
           ...config.currencies.rates,
           CHF_TWD: parseFloat(chfTwd) || 36.5,
@@ -82,13 +147,11 @@ export const SettingsPage: React.FC = () => {
         },
       },
     });
-
-    setStartDate(dateInput.trim() ? dateInput.trim() : null);
-
     setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    setTimeout(() => setSaveSuccess(false), 2500);
   };
 
+  // 儲存 GAS 設定
   const handleSaveGasConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('travel_gas_url', gasUrl.trim());
@@ -97,422 +160,935 @@ export const SettingsPage: React.FC = () => {
 
     const success = await fetchLatestFromSheets();
     if (success) {
-      setTestResult('🟢 連線成功！已由 Google Sheets 拉取最新資料。');
+      setTestResult('🟢 連線成功！已從 Google Sheets 載入最新數據。');
     } else {
-      setTestResult('⚠️ 連線設定已儲存 (若尚未部署 Apps Script 或無網路，將暫存於本機)。');
+      setTestResult('⚠️ 連線設定已儲存 (若無網路或未部署，將先行暫存本機)。');
     }
   };
 
-  const handleClearDate = () => {
-    setDateInput('');
-    setStartDate(null);
+  // 一鍵清理排隊佇列
+  const handleClearQueue = () => {
+    syncManager.clearQueue();
+    setTestResult('✅ 本地同步佇列已成功清空！指示燈已恢復就緒狀態。');
+  };
+
+  // 旅伴 CRUD
+  const handleOpenAddTraveler = () => {
+    setEditingTraveler(null);
+    setTravName('');
+    setTravRole('adult');
+    setTravAge(30);
+    setTravRoleLabel('成人');
+    setTravNotes('');
+    setShowTravelerModal(true);
+  };
+
+  const handleOpenEditTraveler = (t: TravelerProfile) => {
+    setEditingTraveler(t);
+    setTravName(t.name);
+    setTravRole(t.role);
+    setTravAge(t.age);
+    setTravRoleLabel(t.roleLabel || '');
+    setTravNotes(t.notes || '');
+    setShowTravelerModal(true);
+  };
+
+  const handleSaveTraveler = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!travName.trim()) return;
+
+    const list = [...(config.travelers || [])];
+    if (editingTraveler) {
+      const idx = list.findIndex((t) => t.id === editingTraveler.id);
+      if (idx !== -1) {
+        list[idx] = {
+          ...editingTraveler,
+          name: travName.trim(),
+          role: travRole,
+          roleLabel: travRoleLabel.trim() || (travRole === 'senior' ? '長輩' : travRole === 'kid' ? '兒童' : '成人'),
+          age: Number(travAge) || 30,
+          notes: travNotes.trim() || undefined,
+        };
+      }
+    } else {
+      list.push({
+        id: `trav_${Date.now()}`,
+        name: travName.trim(),
+        role: travRole,
+        roleLabel: travRoleLabel.trim() || (travRole === 'senior' ? '長輩' : travRole === 'kid' ? '兒童' : '成人'),
+        age: Number(travAge) || 30,
+        tags: travRole === 'senior' ? ['senior-friendly'] : travRole === 'kid' ? ['kids-highlight'] : [],
+        notes: travNotes.trim() || undefined,
+      });
+    }
+
+    updateConfig({ travelers: list });
+    setShowTravelerModal(false);
+  };
+
+  const handleDeleteTraveler = async (id: string, name: string) => {
+    const ok = await confirm({
+      title: '刪除旅伴成員',
+      message: `確定要從同行名單中移除「${name}」嗎？`,
+      confirmLabel: '確認移除',
+      danger: true,
+    });
+    if (ok) {
+      const list = (config.travelers || []).filter((t) => t.id !== id);
+      updateConfig({ travelers: list });
+    }
+  };
+
+  // 基地 CRUD
+  const handleOpenAddBase = () => {
+    setEditingBase(null);
+    setBaseId(`base_${Date.now().toString(36).slice(-4)}`);
+    setBaseName('');
+    setBaseNameZh('');
+    setBaseColor('#0EA5E9');
+    setBaseHotelName('');
+    setBaseLat('');
+    setBaseLng('');
+    setBaseNotes('');
+    setShowBaseModal(true);
+  };
+
+  const handleOpenEditBase = (b: BaseInfo) => {
+    setEditingBase(b);
+    setBaseId(b.id);
+    setBaseName(b.name);
+    setBaseNameZh(b.nameZh);
+    setBaseColor(b.color || '#0EA5E9');
+    setBaseHotelName(b.hotelName || '');
+    setBaseLat(b.coordinates ? String(b.coordinates[0]) : '');
+    setBaseLng(b.coordinates ? String(b.coordinates[1]) : '');
+    setBaseNotes(b.notes || '');
+    setShowBaseModal(true);
+  };
+
+  const handleSaveBase = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!baseName.trim() || !baseNameZh.trim()) return;
+
+    const coords: [number, number] | undefined =
+      baseLat && baseLng ? [parseFloat(baseLat), parseFloat(baseLng)] : undefined;
+
+    const list = [...(config.bases || [])];
+    if (editingBase) {
+      const idx = list.findIndex((b) => b.id === editingBase.id);
+      if (idx !== -1) {
+        list[idx] = {
+          ...editingBase,
+          name: baseName.trim(),
+          nameZh: baseNameZh.trim(),
+          color: baseColor,
+          hotelName: baseHotelName.trim(),
+          coordinates: coords,
+          notes: baseNotes.trim() || undefined,
+        };
+      }
+    } else {
+      list.push({
+        id: baseId.trim() || `base_${Date.now()}`,
+        name: baseName.trim(),
+        nameZh: baseNameZh.trim(),
+        days: [],
+        color: baseColor,
+        hotelName: baseHotelName.trim(),
+        coordinates: coords,
+        notes: baseNotes.trim() || undefined,
+      });
+    }
+
+    updateConfig({ bases: list });
+    setShowBaseModal(false);
+  };
+
+  const handleDeleteBase = async (id: string, nameZh: string) => {
+    const ok = await confirm({
+      title: '刪除住宿基地',
+      message: `確定要刪除「${nameZh}」基地嗎？若有行程綁定於此基地，建議先重新分配。`,
+      confirmLabel: '確認刪除',
+      danger: true,
+    });
+    if (ok) {
+      const list = (config.bases || []).filter((b) => b.id !== id);
+      updateConfig({ bases: list });
+    }
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
-      {/* 標題 */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-          <Settings className="w-6 h-6 text-slate-400" />
-          <span>旅行設定與多場計畫管理</span>
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-400">
-          切換不同旅遊計畫、自由調整出發日與匯率，並綁定專屬 Google 試算表雲端資料庫。
-        </p>
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      <PageHeader
+        title="系統與旅程管理設定"
+        subtitle="自由調整出發日、管理同行成員與基地坐標、設定特色模組，並綁定雲端資料庫"
+        emoji="⚙️"
+        actions={
+          saveSuccess ? (
+            <span className="text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>設定已儲存！</span>
+            </span>
+          ) : undefined
+        }
+      />
+
+      {/* 設定功能分頁導覽籤 */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none border-b border-[var(--color-border)]">
+        {[
+          { key: 'general', label: '基本與日程', icon: Calendar },
+          { key: 'travelers', label: '同行成員', icon: Users, count: config.travelers?.length },
+          { key: 'bases', label: '住宿基地', icon: Home, count: config.bases?.length },
+          { key: 'currencies', label: '幣別匯率', icon: Coins },
+          { key: 'sync', label: '雲端同步', icon: Cloud },
+          { key: 'trips', label: '所有旅程', icon: Compass, count: trips.length },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as SettingsTab)}
+              className={`px-3.5 py-2 rounded-t-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 border-b-2 -mb-[2px] shrink-0 ${
+                isActive
+                  ? 'border-[var(--color-primary)] text-[var(--color-primary)] bg-[var(--color-bg-subtle)]'
+                  : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              <span>{tab.label}</span>
+              {tab.count !== undefined && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[var(--color-border)] font-mono">
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* 區塊 0: 我的旅遊計畫管理 (多場旅遊自由規劃) */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-          <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Compass className="w-5 h-5 text-red-500" />
-              <span>我的旅遊計畫管理 (共 {trips.length} 場)</span>
+      {/* Tab 1: 基本與日程 */}
+      {activeTab === 'general' && (
+        <form onSubmit={handleSaveGeneral} className="space-y-6">
+          <Card className="p-5 sm:p-6 space-y-4">
+            <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-[var(--color-primary)]" />
+              <span>旅程基本資訊</span>
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              此 App 支援建立與存放多場國內外旅行。點擊「切換使用」即可切換當前活躍規劃。
-            </p>
-          </div>
 
-          <button
-            type="button"
-            onClick={() => setShowNewTripModal(true)}
-            className="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 rounded-xl text-xs sm:text-sm transition-colors shadow-lg shadow-red-600/30 flex items-center gap-1.5 self-start sm:self-auto shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>建立全新旅遊計畫</span>
-          </button>
-        </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="旅行名稱"
+                type="text"
+                required
+                value={tripName}
+                onChange={(e) => setTripName(e.target.value)}
+              />
+              <Input
+                label="副標題 / 行程備註"
+                type="text"
+                value={subtitle}
+                onChange={(e) => setSubtitle(e.target.value)}
+              />
+            </div>
 
-        {/* 旅程卡片網格 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
-          {trips.map((trip) => {
-            const isActive = trip.id === activeTripId;
-            const daysCount = trip.config?.totalDays || trip.itinerary?.length || 1;
-            return (
-              <div
-                key={trip.id}
-                className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
-                  isActive
-                    ? 'bg-slate-950/90 border-emerald-500/60 ring-1 ring-emerald-500/30 shadow-lg'
-                    : 'bg-slate-950/50 border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <span className="text-2xl p-2 rounded-xl bg-slate-900 border border-slate-800 shrink-0">
-                      {trip.coverEmoji || '✈️'}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-bold text-white truncate">
-                          {trip.name}
-                        </h4>
-                      </div>
-                      <div className="text-xs text-slate-400 flex items-center gap-2 mt-1">
-                        {trip.destination && (
-                          <span className="truncate flex items-center gap-0.5 text-slate-300">
-                            <MapPin className="w-3 h-3 text-red-400 shrink-0" />
-                            <span>{trip.destination}</span>
-                          </span>
-                        )}
-                        <span>•</span>
-                        <span className="font-mono text-white font-semibold">{daysCount} 天</span>
-                      </div>
-                      {trip.config?.startDate && (
-                        <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          首日：{trip.config.startDate}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+            {/* 出發日期選擇器 */}
+            <div className="bg-[var(--color-bg-subtle)] p-4 rounded-xl border border-[var(--color-border)] space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-[var(--color-text)]">
+                  旅行出發首日 (Day 1)
+                </label>
+                {dateInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateInput('');
+                      setStartDate(null);
+                    }}
+                    className="text-xs text-red-500 hover:underline"
+                  >
+                    清空為相對天數 (Day 1 - {totalDays})
+                  </button>
+                )}
+              </div>
+              <input
+                type="date"
+                value={dateInput}
+                onChange={(e) => setDateInput(e.target.value)}
+                className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text)] font-mono focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] w-full sm:w-60"
+              />
+              <p className="text-[11px] text-[var(--color-text-muted)]">
+                設定首日後全行程各天將自動依序計算確切日期；若不設定則顯示「Day 01、Day 02」。
+              </p>
+            </div>
 
-                  {isActive && (
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0 flex items-center gap-1">
-                      <Check className="w-3 h-3" />
-                      <span>使用中</span>
-                    </span>
-                  )}
+            {/* 總天數設定 */}
+            <div className="bg-[var(--color-bg-subtle)] p-4 rounded-xl border border-[var(--color-border)] space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-[var(--color-text)]">
+                  旅行總天數 ({totalDays} 天)
+                </label>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-center border border-[var(--color-border)] rounded-xl overflow-hidden bg-[var(--color-bg)] w-fit">
+                  <button
+                    type="button"
+                    onClick={() => setTotalDaysState((prev) => Math.max(1, prev - 1))}
+                    className="w-10 h-10 flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-lg font-bold select-none"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    max="90"
+                    value={totalDays}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val)) setTotalDaysState(Math.max(1, Math.min(90, val)));
+                    }}
+                    className="w-16 bg-transparent text-center font-mono font-bold text-base text-[var(--color-text)] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTotalDaysState((prev) => Math.min(90, prev + 1))}
+                    className="w-10 h-10 flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-lg font-bold select-none"
+                  >
+                    +
+                  </button>
                 </div>
-
-                {/* 操作按鈕列 */}
-                <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    {!isActive ? (
-                      <button
-                        type="button"
-                        onClick={() => switchTrip(trip.id)}
-                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-400 hover:text-sky-300 font-semibold transition-colors text-xs"
-                      >
-                        切換至此旅程
-                      </button>
-                    ) : (
-                      <span className="text-[11px] text-emerald-400 font-medium">
-                        目前正在規劃此行程
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] text-[var(--color-text-muted)] mr-1">快捷預設:</span>
+                  {[5, 7, 10, 14, 16, 21].map((d) => (
                     <button
+                      key={d}
                       type="button"
-                      onClick={() => duplicateTrip(trip.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-                      title="複製此旅程建立副本"
+                      onClick={() => setTotalDaysState(d)}
+                      className={`px-2.5 py-1 rounded-lg text-xs transition-all ${
+                        totalDays === d
+                          ? 'bg-[var(--color-primary)] text-white font-bold shadow-sm'
+                          : 'bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-[var(--color-text)]'
+                      }`}
                     >
-                      <Copy className="w-3.5 h-3.5" />
+                      {d} 天
                     </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
-                    {trips.length > 1 && (
+            {/* 目的地特色模組開關 */}
+            <div className="bg-[var(--color-bg-subtle)] p-4 rounded-xl border border-[var(--color-border)] space-y-3">
+              <label className="text-xs font-bold text-[var(--color-text)] flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <span>目的地專屬特色功能模組</span>
+              </label>
+              <div className="space-y-2">
+                {Object.values(MODULE_REGISTRY).map((mod) => {
+                  const isEnabled = activeModules.includes(mod.id);
+                  return (
+                    <div
+                      key={mod.id}
+                      className="p-3 bg-[var(--color-bg)] rounded-xl border border-[var(--color-border)] flex items-center justify-between gap-3"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{mod.emoji}</span>
+                          <span className="text-xs sm:text-sm font-bold text-[var(--color-text)]">
+                            {mod.label}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                          {mod.description}
+                        </p>
+                      </div>
                       <button
                         type="button"
                         onClick={() => {
-                          if (window.confirm(`確定要刪除「${trip.name}」這場旅遊計畫嗎？此動作無法復原。`)) {
-                            deleteTrip(trip.id);
+                          if (isEnabled) {
+                            setActiveModules(activeModules.filter((m) => m !== mod.id));
+                          } else {
+                            setActiveModules([...activeModules, mod.id]);
                           }
                         }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
-                        title="刪除此旅程"
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                          isEnabled
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-[var(--color-bg-subtle)] text-[var(--color-text-muted)] border border-[var(--color-border)]'
+                        }`}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        {isEnabled ? '已啟用' : '未開啟'}
                       </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <Button type="submit" variant="primary">
+              <Save className="w-4 h-4 mr-1.5" />
+              <span>儲存基本與日程設定</span>
+            </Button>
+          </Card>
+        </form>
+      )}
+
+      {/* Tab 2: 同行成員 */}
+      {activeTab === 'travelers' && (
+        <Card className="p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3">
+            <div>
+              <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+                <Users className="w-4 h-4 text-[var(--color-primary)]" />
+                <span>同行成員檔案 ({config.travelers?.length || 0} 位)</span>
+              </h3>
+              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                建立同行家人或朋友的檔案，系統會依年齡自動精算通票優惠與行李打包建議。
+              </p>
+            </div>
+            <Button type="button" variant="primary" onClick={handleOpenAddTraveler}>
+              <Plus className="w-4 h-4 mr-1.5" />
+              <span>新增成員</span>
+            </Button>
+          </div>
+
+          {(config.travelers || []).length === 0 ? (
+            <EmptyState
+              title="尚未建立任何同行成員"
+              description="點擊上方「新增成員」按鈕為家人或朋友建立專屬檔案。"
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {config.travelers.map((t) => (
+                <div
+                  key={t.id}
+                  className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] flex flex-col justify-between gap-3 hover:border-[var(--color-primary)]/40 transition-colors"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-sm text-[var(--color-text)]">{t.name}</h4>
+                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-[var(--color-bg-subtle)] font-medium text-[var(--color-primary)]">
+                        {t.roleLabel || t.role}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--color-text-muted)] font-mono">年齡: {t.age} 歲</p>
+                    {t.notes && (
+                      <p className="text-xs text-[var(--color-text-muted)] line-clamp-2 mt-1">
+                        {t.notes}
+                      </p>
                     )}
                   </div>
+
+                  <div className="flex justify-end gap-1 pt-2 border-t border-[var(--color-border)]">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditTraveler(t)}
+                      className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-primary)] rounded-lg hover:bg-[var(--color-bg-subtle)]"
+                      title="編輯成員"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTraveler(t.id, t.name)}
+                      className="p-1.5 text-[var(--color-text-muted)] hover:text-red-500 rounded-lg hover:bg-red-500/10"
+                      title="刪除成員"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 區塊 1: 當前旅程基本設定與出發日期 (彈性日期核心) */}
-      <form onSubmit={handleSaveGeneral} className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-        <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
-          <Calendar className="w-5 h-5 text-red-500" />
-          <span>當前旅程基本設定 ({config.tripName})</span>
-        </h3>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">
-              旅行名稱
-            </label>
-            <input
-              type="text"
-              required
-              value={tripName}
-              onChange={(e) => setTripName(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">
-              副標題 / 備忘說明
-            </label>
-            <input
-              type="text"
-              value={subtitle}
-              onChange={(e) => setSubtitle(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-            />
-          </div>
-        </div>
-
-        {/* 旅行總天數設定 (動態預先給出對應日程卡片) */}
-        <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-white flex items-center gap-1.5">
-              <span>旅行總天數設定</span>
-              <span className="text-[11px] font-normal text-slate-400">
-                (增減天數將同步生成/修剪「每日行程」卡片與篩選天數)
-              </span>
-            </label>
-            <span className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded font-mono font-bold">
-              共 {totalDays} 天
-            </span>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            {/* 加減按鈕控制組 */}
-            <div className="flex items-center border border-slate-700 rounded-xl overflow-hidden bg-slate-900 w-fit">
-              <button
-                type="button"
-                onClick={() => setTotalDaysState((prev) => Math.max(1, prev - 1))}
-                className="w-10 h-10 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-lg font-bold select-none"
-                title="減少 1 天"
-              >
-                -
-              </button>
-              <input
-                type="number"
-                min="1"
-                max="90"
-                value={totalDays}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  if (!isNaN(val)) setTotalDaysState(Math.max(1, Math.min(90, val)));
-                }}
-                className="w-16 bg-transparent text-center font-mono font-bold text-base text-white focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => setTotalDaysState((prev) => Math.min(90, prev + 1))}
-                className="w-10 h-10 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-lg font-bold select-none"
-                title="增加 1 天"
-              >
-                +
-              </button>
-            </div>
-
-            {/* 常見旅遊天數快速選項 */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[11px] text-slate-500 mr-1 hidden sm:inline">快捷預設:</span>
-              {[5, 7, 10, 14, 16, 21].map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setTotalDaysState(d)}
-                  className={`px-2.5 py-1 rounded-lg text-xs transition-all ${
-                    totalDays === d
-                      ? 'bg-red-600 text-white font-bold shadow-md shadow-red-600/30'
-                      : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
-                  }`}
-                >
-                  {d} 天
-                </button>
               ))}
             </div>
-          </div>
-
-          <p className="text-[11px] text-slate-400">
-            增加天數時系統將自動在「每日行程」預先產生相應天數之空白探索排程卡片；減少天數時則自動修剪多出的天數。
-          </p>
-        </div>
-
-        {/* 出發日期選擇器 (彈性核心) */}
-        <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-white flex items-center gap-1.5">
-              <span>旅行出發首日 (Day 1)</span>
-              <span className="text-[11px] font-normal text-slate-400">(設定後 {totalDays} 天日期自動連續推算)</span>
-            </label>
-            {dateInput && (
-              <button
-                type="button"
-                onClick={handleClearDate}
-                className="text-xs text-red-400 hover:underline"
-              >
-                清空為相對天數 (Day 1 - {totalDays})
-              </button>
-            )}
-          </div>
-
-          <div className="flex gap-2">
-            <input
-              type="date"
-              value={dateInput}
-              onChange={(e) => setDateInput(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-500 flex-1 font-mono"
-            />
-          </div>
-          <p className="text-[11px] text-slate-400">
-            若暫無確切日期，可清空此欄，首頁將直接顯示「Day 01、Day 02」而不受固定年份與月份限制。
-          </p>
-        </div>
-
-        {/* 匯率微調 */}
-        <div className="grid grid-cols-2 gap-4 pt-2">
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">
-              瑞士法郎匯率 (1 CHF = ? TWD)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={chfTwd}
-              onChange={(e) => setChfTwd(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-mono"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">
-              歐元匯率 (1 EUR = ? TWD)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={eurTwd}
-              onChange={(e) => setEurTwd(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-mono"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between pt-3">
-          <button
-            type="submit"
-            className="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs sm:text-sm transition-colors shadow-lg shadow-red-600/30 flex items-center gap-1.5"
-          >
-            <Save className="w-4 h-4" />
-            <span>儲存基本設定</span>
-          </button>
-
-          {saveSuccess && (
-            <span className="text-emerald-400 text-xs font-semibold flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>設定已成功儲存！</span>
-            </span>
           )}
-        </div>
-      </form>
+        </Card>
+      )}
 
-      {/* 區塊 2: Google Sheets 雲端連線設定 */}
-      <form onSubmit={handleSaveGasConfig} className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <Cloud className="w-5 h-5 text-sky-400" />
-            <span>Google Sheets 試算表資料庫綁定</span>
-          </h3>
+      {/* Tab 3: 住宿基地 */}
+      {activeTab === 'bases' && (
+        <Card className="p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3">
+            <div>
+              <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+                <Home className="w-4 h-4 text-[var(--color-primary)]" />
+                <span>住宿基地與地理中心 ({config.bases?.length || 0} 個)</span>
+              </h3>
+              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                設定各城市停留基地，輸入地理坐標可供氣象預報與地圖導覽自動定位。
+              </p>
+            </div>
+            <Button type="button" variant="primary" onClick={handleOpenAddBase}>
+              <Plus className="w-4 h-4 mr-1.5" />
+              <span>新增基地</span>
+            </Button>
+          </div>
 
-          <a
-            href="https://github.com/hippoking1/Travel_Manager_App/blob/main/google-apps-script/SETUP.md"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-sky-400 hover:underline inline-flex items-center gap-1"
-          >
-            <span>查看部署圖文教學</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
+          {(config.bases || []).length === 0 ? (
+            <EmptyState
+              title="尚未建立任何住宿基地"
+              description="點擊「新增基地」建立第一個城市或飯店據點。"
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {config.bases.map((b) => (
+                <div
+                  key={b.id}
+                  className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] flex flex-col justify-between gap-3 hover:border-[var(--color-primary)]/40 transition-colors"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-3 h-3 rounded-full shrink-0"
+                          style={{ backgroundColor: b.color || '#0EA5E9' }}
+                        />
+                        <h4 className="font-bold text-sm text-[var(--color-text)]">
+                          {b.nameZh} ({b.name})
+                        </h4>
+                      </div>
+                      <span className="text-[10px] text-[var(--color-text-muted)] font-mono">
+                        ID: {b.id}
+                      </span>
+                    </div>
 
-        <p className="text-xs text-slate-300 leading-relaxed">
-          將你部署完成的 Google Apps Script (GAS) 網頁應用程式 URL 貼於下方，全家人的手機便能直接對同一份 Google Sheet 即時記帳、打勾行李與同步備忘！
-        </p>
+                    <p className="text-xs text-[var(--color-text)] font-medium">
+                      飯店: {b.hotelName || '尚未指定'}
+                    </p>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-400 mb-1">
-            Apps Script Web App URL
-          </label>
-          <input
-            type="url"
-            value={gasUrl}
-            onChange={(e) => setGasUrl(e.target.value)}
-            placeholder="https://script.google.com/macros/s/AKfycb.../exec"
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-sky-500"
-          />
-        </div>
+                    {b.coordinates && (
+                      <p className="text-[11px] text-[var(--color-text-muted)] font-mono flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-[var(--color-primary)]" />
+                        <span>
+                          [{b.coordinates[0].toFixed(4)}, {b.coordinates[1].toFixed(4)}]
+                        </span>
+                      </p>
+                    )}
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-400 mb-1">
-            自訂密鑰 (Family Secret Key)
-          </label>
-          <div className="flex gap-2">
-            <input
+                    {b.notes && (
+                      <p className="text-xs text-[var(--color-text-muted)] line-clamp-2">
+                        {b.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-1 pt-2 border-t border-[var(--color-border)]">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditBase(b)}
+                      className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-primary)] rounded-lg hover:bg-[var(--color-bg-subtle)]"
+                      title="編輯基地"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteBase(b.id, b.nameZh)}
+                      className="p-1.5 text-[var(--color-text-muted)] hover:text-red-500 rounded-lg hover:bg-red-500/10"
+                      title="刪除基地"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Tab 4: 幣別匯率 */}
+      {activeTab === 'currencies' && (
+        <form onSubmit={handleSaveCurrencies} className="space-y-4">
+          <Card className="p-5 sm:p-6 space-y-4">
+            <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2 border-b border-[var(--color-border)] pb-3">
+              <Coins className="w-4 h-4 text-[var(--color-primary)]" />
+              <span>幣別與自訂匯率換算</span>
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Select
+                label="主要記帳幣別 (Primary)"
+                value={primaryCurrency}
+                onChange={(e) => setPrimaryCurrency(e.target.value)}
+              >
+                <option value="CHF">瑞士法郎 (CHF)</option>
+                <option value="EUR">歐元 (EUR)</option>
+                <option value="TWD">新台幣 (TWD)</option>
+                <option value="USD">美元 (USD)</option>
+                <option value="JPY">日圓 (JPY)</option>
+              </Select>
+
+              <Input
+                label="瑞士法郎匯率 (1 CHF = ? TWD)"
+                type="number"
+                step="0.01"
+                value={chfTwd}
+                onChange={(e) => setChfTwd(e.target.value)}
+              />
+
+              <Input
+                label="歐元匯率 (1 EUR = ? TWD)"
+                type="number"
+                step="0.01"
+                value={eurTwd}
+                onChange={(e) => setEurTwd(e.target.value)}
+              />
+            </div>
+
+            <Button type="submit" variant="primary">
+              <Save className="w-4 h-4 mr-1.5" />
+              <span>儲存匯率設定</span>
+            </Button>
+          </Card>
+        </form>
+      )}
+
+      {/* Tab 5: 雲端同步 */}
+      {activeTab === 'sync' && (
+        <form onSubmit={handleSaveGasConfig} className="space-y-4">
+          <Card className="p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+              <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+                <Cloud className="w-4 h-4 text-sky-500" />
+                <span>Google Sheets 試算表資料庫綁定</span>
+              </h3>
+
+              <a
+                href="https://github.com/hippoking1/Travel_Manager_App/blob/main/google-apps-script/SETUP.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-sky-600 dark:text-sky-400 hover:underline inline-flex items-center gap-1"
+              >
+                <span>部署圖文教學</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
+              將部署完成的 Google Apps Script (GAS) 網頁應用程式 URL 填入下方，即可與家人即時記帳、打勾行李與同步備忘。
+            </p>
+
+            <Input
+              label="Apps Script Web App URL"
+              type="url"
+              value={gasUrl}
+              onChange={(e) => setGasUrl(e.target.value)}
+              placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+            />
+
+            <Input
+              label="自訂防護密鑰 (Family Secret Key)"
               type="text"
               value={secret}
               onChange={(e) => setSecret(e.target.value)}
               placeholder="SWISS_ODYSSEY_2027_SECRET"
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+              <Button type="submit" variant="primary" disabled={isFetchingRemote}>
+                <RefreshCw className={`w-4 h-4 mr-1.5 ${isFetchingRemote ? 'animate-spin' : ''}`} />
+                <span>儲存並測試連線</span>
+              </Button>
+
+              {testResult && (
+                <span className="text-xs font-semibold text-[var(--color-text)]">
+                  {testResult}
+                </span>
+              )}
+            </div>
+
+            {/* 佇列診斷與清理 */}
+            <div className="border-t border-[var(--color-border)] pt-4 mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="text-xs text-[var(--color-text-muted)]">
+                <span>若同步指示燈卡在待同步狀態，可點擊重設本地排隊佇列：</span>
+              </div>
+              <Button type="button" variant="outline" onClick={handleClearQueue}>
+                清空待同步佇列
+              </Button>
+            </div>
+          </Card>
+        </form>
+      )}
+
+      {/* Tab 6: 旅程計畫列表 */}
+      {activeTab === 'trips' && (
+        <Card className="p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3">
+            <div>
+              <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+                <Compass className="w-4 h-4 text-[var(--color-primary)]" />
+                <span>全部旅遊計畫 (共 {trips.length} 場)</span>
+              </h3>
+              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                切換不同旅遊計畫、建立新旅程或複製現有行程副本。
+              </p>
+            </div>
+
+            <Button type="button" variant="primary" onClick={() => setShowNewTripModal(true)}>
+              <Plus className="w-4 h-4 mr-1.5" />
+              <span>建立全新計畫</span>
+            </Button>
           </div>
-        </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={isFetchingRemote}
-            className="bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded-xl text-xs sm:text-sm transition-colors shadow-lg shadow-sky-600/30 flex items-center justify-center gap-1.5"
-          >
-            <Cloud className="w-4 h-4" />
-            <span>儲存並測試連線</span>
-          </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+            {trips.map((trip) => {
+              const isActive = trip.id === activeTripId;
+              const daysCount = trip.config?.totalDays || trip.itinerary?.length || 1;
+              return (
+                <div
+                  key={trip.id}
+                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                    isActive
+                      ? 'bg-[var(--color-bg)] border-[var(--color-primary)] ring-1 ring-[var(--color-primary)] shadow-sm'
+                      : 'bg-[var(--color-bg)] border-[var(--color-border)] hover:border-[var(--color-border-hover)]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <span className="text-2xl p-2 rounded-xl bg-[var(--color-bg-subtle)] border border-[var(--color-border)] shrink-0">
+                        {trip.coverEmoji || '✈️'}
+                      </span>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-bold text-[var(--color-text)] truncate">
+                          {trip.name}
+                        </h4>
+                        <div className="text-xs text-[var(--color-text-muted)] flex items-center gap-2 mt-1">
+                          {trip.destination && (
+                            <span className="truncate flex items-center gap-0.5">
+                              <MapPin className="w-3 h-3 text-red-500 shrink-0" />
+                              <span>{trip.destination}</span>
+                            </span>
+                          )}
+                          <span>•</span>
+                          <span className="font-mono font-semibold text-[var(--color-text)]">
+                            {daysCount} 天
+                          </span>
+                        </div>
+                        {trip.config?.startDate && (
+                          <p className="text-[11px] text-[var(--color-text-muted)] font-mono mt-0.5">
+                            首日: {trip.config.startDate}
+                          </p>
+                        )}
+                      </div>
+                    </div>
 
-          {testResult && (
-            <span className="text-xs font-semibold text-slate-200">
-              {testResult}
-            </span>
-          )}
-        </div>
+                    {isActive && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        <span>規劃中</span>
+                      </span>
+                    )}
+                  </div>
 
-        {/* 佇列診斷與清理按鈕 (解決待同步卡死問題) */}
-        <div className="border-t border-slate-800 pt-3 mt-3 flex items-center justify-between">
-          <div className="text-xs text-slate-400">
-            <span>若同步指示燈卡在待同步，可點擊重設清空本地排隊佇列：</span>
+                  <div className="flex items-center justify-between pt-2 border-t border-[var(--color-border)] text-xs">
+                    {!isActive ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => switchTrip(trip.id)}
+                      >
+                        切換至此旅程
+                      </Button>
+                    ) : (
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                        目前作用中的計畫
+                      </span>
+                    )}
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => duplicateTrip(trip.id)}
+                        className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-subtle)] transition-colors"
+                        title="複製旅程"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                      {trips.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: '刪除旅遊計畫',
+                              message: `確定要刪除「${trip.name}」這場旅遊計畫嗎？此動作無法復原。`,
+                              confirmLabel: '確認刪除',
+                              danger: true,
+                            });
+                            if (ok) deleteTrip(trip.id);
+                          }}
+                          className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                          title="刪除旅程"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              localStorage.removeItem('travel_sync_offline_queue');
-              setTestResult('✅ 本地同步佇列已成功清空！指示燈已恢復乾淨狀態。');
-            }}
-            className="text-xs bg-slate-800 hover:bg-red-950/60 hover:text-red-300 text-slate-300 px-3 py-1.5 rounded-xl border border-slate-700 transition-colors"
-          >
-            一鍵重設/清空待同步佇列
-          </button>
-        </div>
-      </form>
+        </Card>
+      )}
+
+      {/* 旅伴 Modal */}
+      {showTravelerModal && (
+        <Modal
+          isOpen={true}
+          onClose={() => setShowTravelerModal(false)}
+          title={editingTraveler ? '編輯同行成員' : '新增同行成員'}
+        >
+          <form onSubmit={handleSaveTraveler} className="space-y-4">
+            <Input
+              label="姓名 / 暱稱"
+              type="text"
+              required
+              value={travName}
+              onChange={(e) => setTravName(e.target.value)}
+              placeholder="例如: 爸爸、小明"
+            />
+
+            <div className="grid grid-cols-3 gap-2">
+              <Select
+                label="成員身分"
+                value={travRole}
+                onChange={(e) => setTravRole(e.target.value as 'adult' | 'senior' | 'kid')}
+              >
+                <option value="adult">成人</option>
+                <option value="senior">長輩</option>
+                <option value="kid">兒童</option>
+              </Select>
+
+              <Input
+                label="年齡 (歲)"
+                type="number"
+                min="0"
+                max="120"
+                value={String(travAge)}
+                onChange={(e) => setTravAge(parseInt(e.target.value, 10) || 0)}
+              />
+
+              <Input
+                label="顯示標籤"
+                type="text"
+                value={travRoleLabel}
+                onChange={(e) => setTravRoleLabel(e.target.value)}
+                placeholder="例如: 長輩 (68y)"
+              />
+            </div>
+
+            <Input
+              label="專長或備註說明 (選填)"
+              type="text"
+              value={travNotes}
+              onChange={(e) => setTravNotes(e.target.value)}
+              placeholder="例如: 負責點餐、喜歡戶外健行"
+            />
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setShowTravelerModal(false)}>
+                取消
+              </Button>
+              <Button type="submit" variant="primary">
+                儲存成員
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* 基地 Modal */}
+      {showBaseModal && (
+        <Modal
+          isOpen={true}
+          onClose={() => setShowBaseModal(false)}
+          title={editingBase ? '編輯住宿基地' : '新增住宿基地'}
+        >
+          <form onSubmit={handleSaveBase} className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                label="基地代碼 (ID)"
+                type="text"
+                required
+                disabled={!!editingBase}
+                value={baseId}
+                onChange={(e) => setBaseId(e.target.value)}
+                placeholder="例如: tokyo, luzern"
+              />
+              <Input
+                label="代表色票 (HEX)"
+                type="color"
+                value={baseColor}
+                onChange={(e) => setBaseColor(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                label="英文名稱"
+                type="text"
+                required
+                value={baseName}
+                onChange={(e) => setBaseName(e.target.value)}
+                placeholder="例如: Luzern"
+              />
+              <Input
+                label="中文名稱"
+                type="text"
+                required
+                value={baseNameZh}
+                onChange={(e) => setBaseNameZh(e.target.value)}
+                placeholder="例如: 琉森"
+              />
+            </div>
+
+            <Input
+              label="主要飯店 / 公寓名稱"
+              type="text"
+              value={baseHotelName}
+              onChange={(e) => setBaseHotelName(e.target.value)}
+              placeholder="例如: Lakeside Family Apartment"
+            />
+
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                label="緯度 (Latitude)"
+                type="number"
+                step="0.0001"
+                value={baseLat}
+                onChange={(e) => setBaseLat(e.target.value)}
+                placeholder="例如: 47.0502"
+              />
+              <Input
+                label="經度 (Longitude)"
+                type="number"
+                step="0.0001"
+                value={baseLng}
+                onChange={(e) => setBaseLng(e.target.value)}
+                placeholder="例如: 8.3093"
+              />
+            </div>
+
+            <Input
+              label="特色或周邊景點備註"
+              type="text"
+              value={baseNotes}
+              onChange={(e) => setBaseNotes(e.target.value)}
+              placeholder="例如: 卡貝爾木橋、瑞吉山纜車起點"
+            />
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setShowBaseModal(false)}>
+                取消
+              </Button>
+              <Button type="submit" variant="primary">
+                儲存基地
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* 新增旅程彈出視窗 */}
       <NewTripModal

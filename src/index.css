@@ -1,40 +1,79 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #FAF8F5;
+  --surface: #FFFFFF;
+  --surface-2: #F4F1EA;
+  --surface-3: #EAE5DC;
+  --border: #E6E1D8;
+  --border-subtle: #F0ECE4;
+  --ink: #1C1917;
+  --ink-secondary: #57534E;
+  --muted: #78716C;
+  --accent: #0F766E;
+  --accent-hover: #115E59;
+  --accent-fg: #FFFFFF;
+  --accent-soft: #CCFBF1;
+  --accent-soft-fg: #0F766E;
+  --danger: #DC2626;
+  --danger-soft: #FEE2E2;
+  --warn: #D97706;
+  --warn-soft: #FEF3C7;
+  --ok: #059669;
+  --ok-soft: #D1FAE5;
+}
+
+.dark {
+  --bg: #0C0A09;
+  --surface: #1C1917;
+  --surface-2: #292524;
+  --surface-3: #342F2C;
+  --border: #38332E;
+  --border-subtle: #292524;
+  --ink: #F5F5F4;
+  --ink-secondary: #D6D3D1;
+  --muted: #A8A29E;
+  --accent: #2DD4BF;
+  --accent-hover: #14B8A6;
+  --accent-fg: #042F2E;
+  --accent-soft: #134E4A;
+  --accent-soft-fg: #5EEAD4;
+  --danger: #EF4444;
+  --danger-soft: #451A1A;
+  --warn: #F59E0B;
+  --warn-soft: #452B14;
+  --ok: #10B981;
+  --ok-soft: #133E2B;
+}
 
 @layer base {
-  :root {
-    --color-slate-dark: #1E293B;
-    --color-swiss-red: #E53E3E;
-    --color-alpine-blue: #0EA5E9;
-    --color-glacier: #E0F2FE;
-    --color-warm-amber: #F59E0B;
-    --color-emerald-green: #10B981;
-  }
-
   body {
     font-family: 'Inter', 'Noto Sans TC', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background-color: #0f172a;
-    color: #f8fafc;
+    background-color: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
     overflow-x: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 }
 
-/* 自訂精緻滾動條 */
+/* 精緻滾動條 */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.4);
+  background: rgba(120, 113, 108, 0.3);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.7);
+  background: rgba(120, 113, 108, 0.5);
 }
 
-/* 隱藏原生滾動條但保持滾動能力 (手機橫向 Tab 滑動常用) */
 .scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -43,27 +82,27 @@
   display: none;
 }
 
-/* Leaflet 地圖暗黑適應與圖釘抗鋸齒 */
+/* Leaflet 地圖樣式適配 */
 .leaflet-container {
   width: 100%;
   height: 100%;
   font-family: inherit !important;
-  background-color: #0f172a !important;
+  background-color: var(--bg) !important;
 }
 
 .leaflet-popup-content-wrapper {
-  background: #1e293b !important;
-  color: #f8fafc !important;
-  border-radius: 1rem !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+  border-radius: 0.875rem !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
 }
 
 .leaflet-popup-tip {
-  background: #1e293b !important;
+  background: var(--surface) !important;
 }
 
-/* iOS 底部安全區域防擋住 */
+/* iOS 底部安全區域 */
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 16px);
 }
@@ -71,11 +110,11 @@
   padding-top: env(safe-area-inset-top, 16px);
 }
 
-/* 列印專用樣式：輸出乾淨美觀之 PDF 行程手冊 */
+/* 列印專用樣式 */
 @media print {
   body {
     background-color: #ffffff !important;
-    color: #0f172a !important;
+    color: #1c1917 !important;
   }
   .no-print {
     display: none !important;

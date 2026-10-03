@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Cloud, 
   CloudOff, 
@@ -6,18 +6,18 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   Trash2, 
-  X
+  X 
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { syncManager } from '../../services/syncManager';
 import { useTripStore } from '../../stores/tripStore';
 import type { SyncStatusState } from '../../types';
+import { Popover } from '../ui/Popover';
+import { Button } from '../ui/Button';
 
 export const SyncIndicator: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<SyncStatusState>(syncManager.getStatus());
   const { fetchLatestFromSheets, isFetchingRemote } = useTripStore();
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const unsubscribe = syncManager.subscribe((status) => {
@@ -26,29 +26,12 @@ export const SyncIndicator: React.FC = () => {
     return unsubscribe;
   }, []);
 
-  // 點擊外部自動關閉
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
-
-  const handleManualSync = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleManualSync = async () => {
     await syncManager.flushQueue();
     await fetchLatestFromSheets();
   };
 
-  const handleClearQueue = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleClearQueue = () => {
     syncManager.clearQueue();
   };
 
@@ -57,152 +40,157 @@ export const SyncIndicator: React.FC = () => {
   const hasPending = syncStatus.pendingQueueCount > 0;
 
   return (
-    <div className="relative inline-block" ref={dropdownRef}>
-      {/* 頂部觸發按鈕 */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
-          isWorking
-            ? 'bg-slate-800 text-sky-300 border-sky-500/40'
-            : hasError && hasPending
-            ? 'bg-amber-950/80 hover:bg-amber-900/80 text-amber-300 border-amber-600/60 shadow-lg shadow-amber-950/50'
-            : syncStatus.isConfigured
-            ? hasPending
-              ? 'bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 border-amber-600/50'
-              : 'bg-slate-800/80 hover:bg-slate-700/80 text-emerald-300 border-slate-700/60'
-            : 'bg-slate-800/80 hover:bg-slate-700/80 text-amber-300 border-slate-700/60'
-        }`}
-        title="點擊查看同步詳情與佇列管理"
-      >
-        {isWorking ? (
-          <>
-            <RefreshCw className="w-3.5 h-3.5 text-sky-400 animate-spin" />
-            <span className="hidden sm:inline text-sky-300">同步中...</span>
-          </>
-        ) : hasError && hasPending ? (
-          <>
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-            <span className="text-amber-300 font-bold">待同步 ({syncStatus.pendingQueueCount})</span>
-          </>
-        ) : syncStatus.isConfigured ? (
-          <>
-            <span className="relative flex h-2 w-2">
-              <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                hasPending ? 'animate-ping bg-amber-400' : 'bg-emerald-400'
-              }`}></span>
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                hasPending ? 'bg-amber-500' : 'bg-emerald-500'
-              }`}></span>
-            </span>
-            <Cloud className={`w-3.5 h-3.5 ${hasPending ? 'text-amber-400' : 'text-emerald-400'}`} />
-            <span className="hidden sm:inline">
-              {hasPending ? `待同步 (${syncStatus.pendingQueueCount})` : '雲端已連線'}
-            </span>
-          </>
-        ) : (
-          <>
-            <CloudOff className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline text-amber-300">本機離線模式</span>
-          </>
-        )}
-      </button>
-
-      {/* 點擊展開的同步管理面板 */}
-      {isOpen && (
-        <div className="absolute right-0 mt-2 w-72 sm:w-80 p-4 bg-slate-900 text-slate-200 text-xs rounded-2xl shadow-2xl border border-slate-700 z-50 animate-in fade-in zoom-in-95">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-            <span className="font-bold text-white text-sm flex items-center gap-1.5">
-              <Cloud className="w-4 h-4 text-sky-400" />
-              <span>雲端資料同步中心</span>
+    <Popover
+      align="right"
+      trigger={({ isOpen, toggle }) => (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={isOpen}
+          aria-label="雲端同步狀態"
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border cursor-pointer select-none ${
+            isWorking
+              ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border-teal-500/40'
+              : hasError && hasPending
+              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-500/50'
+              : syncStatus.isConfigured
+              ? hasPending
+                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-500/40'
+                : 'bg-stone-100 dark:bg-stone-800 text-teal-700 dark:text-teal-300 border-stone-200 dark:border-stone-700'
+              : 'bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-700'
+          }`}
+        >
+          {isWorking ? (
+            <>
+              <RefreshCw className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 animate-spin" />
+              <span className="hidden sm:inline">同步中</span>
+            </>
+          ) : hasError && hasPending ? (
+            <>
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              <span className="hidden sm:inline font-bold">待同步 ({syncStatus.pendingQueueCount})</span>
+            </>
+          ) : syncStatus.isConfigured ? (
+            <>
+              <span className="relative flex h-2 w-2">
+                <span
+                  className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                    hasPending ? 'animate-ping bg-amber-400' : 'bg-teal-400'
+                  }`}
+                />
+                <span
+                  className={`relative inline-flex rounded-full h-2 w-2 ${
+                    hasPending ? 'bg-amber-500' : 'bg-teal-500'
+                  }`}
+                />
+              </span>
+              <Cloud className={`w-3.5 h-3.5 ${hasPending ? 'text-amber-600' : 'text-teal-600 dark:text-teal-400'}`} />
+              <span className="hidden sm:inline">
+                {hasPending ? `${syncStatus.pendingQueueCount} 待同步` : '已連線'}
+              </span>
+            </>
+          ) : (
+            <>
+              <CloudOff className="w-3.5 h-3.5 text-stone-400" />
+              <span className="hidden sm:inline">離線模式</span>
+            </>
+          )}
+        </button>
+      )}
+    >
+      {({ close }) => (
+        <div className="w-72 sm:w-80 p-4 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-xl text-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-2">
+            <span className="font-bold text-stone-900 dark:text-stone-100 text-sm flex items-center gap-1.5">
+              <Cloud className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+              <span>雲端資料同步狀態</span>
             </span>
             <button
-              onClick={() => setIsOpen(false)}
-              className="text-slate-400 hover:text-white p-1"
+              type="button"
+              onClick={close}
+              className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 p-0.5"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* 連線狀態檢視 */}
-          <div className="space-y-2 mb-3">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">Google 試算表連線：</span>
+              <span className="text-stone-500 dark:text-stone-400">Google Sheets 連線：</span>
               {syncStatus.isConfigured ? (
-                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                <span className="text-teal-600 dark:text-teal-400 font-bold flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" /> 已設定 URL
                 </span>
               ) : (
-                <span className="text-amber-400 font-bold flex items-center gap-1">
-                  <CloudOff className="w-3.5 h-3.5" /> 尚未設定 (本機模式)
+                <span className="text-stone-500 font-medium flex items-center gap-1">
+                  <CloudOff className="w-3.5 h-3.5" /> 本機模式 (未連線)
                 </span>
               )}
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">目前排隊待同步項目：</span>
-              <span className={`font-mono font-bold ${hasPending ? 'text-amber-400' : 'text-slate-300'}`}>
+              <span className="text-stone-500 dark:text-stone-400">排隊待同步筆數：</span>
+              <span className={`font-mono font-bold ${hasPending ? 'text-amber-600 dark:text-amber-400' : 'text-stone-700 dark:text-stone-300'}`}>
                 {syncStatus.pendingQueueCount} 筆
               </span>
             </div>
 
             {syncStatus.lastSyncedAt && (
-              <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <div className="flex items-center justify-between text-[11px] text-stone-400">
                 <span>上次成功同步：</span>
-                <span className="text-slate-300 font-mono">
+                <span className="font-mono text-stone-600 dark:text-stone-300">
                   {new Date(syncStatus.lastSyncedAt).toLocaleTimeString()}
                 </span>
               </div>
             )}
           </div>
 
-          {/* 錯誤警告通知 */}
           {syncStatus.lastError && (
-            <div className="p-2.5 rounded-xl bg-red-950/60 border border-red-900/60 text-red-200 text-[11px] space-y-1 mb-3">
-              <div className="font-bold flex items-center gap-1 text-red-300">
+            <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300 text-[11px] space-y-1">
+              <div className="font-bold flex items-center gap-1">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                 <span>同步失敗提示：</span>
               </div>
-              <p className="line-clamp-3 opacity-90 leading-relaxed font-mono">
+              <p className="line-clamp-2 font-mono text-[10px] opacity-90">
                 {syncStatus.lastError}
-              </p>
-              <p className="text-[10px] text-red-400 mt-1">
-                可能原因：Google 試算表中缺少相應的分頁名稱（如 TripConfig, Expenses），或 Apps Script 權限尚未開啟「所有人皆可存取」。
               </p>
             </div>
           )}
 
-          {/* 操作按鈕群 */}
-          <div className="space-y-2 pt-1 border-t border-slate-800">
-            <button
+          <div className="space-y-2 pt-2 border-t border-stone-100 dark:border-stone-800">
+            <Button
+              variant="primary"
+              size="sm"
               onClick={handleManualSync}
-              disabled={isWorking}
-              className="w-full bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md"
+              loading={isWorking}
+              icon={<RefreshCw className="w-3.5 h-3.5" />}
+              className="w-full"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isWorking ? 'animate-spin' : ''}`} />
-              <span>{isWorking ? '同步處理中...' : '立即手動強制同步'}</span>
-            </button>
+              {isWorking ? '同步處理中...' : '手動執行雲端同步'}
+            </Button>
 
             {hasPending && (
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleClearQueue}
-                className="w-full bg-slate-800 hover:bg-red-950/50 hover:text-red-300 text-slate-300 font-semibold py-1.5 rounded-xl text-xs flex items-center justify-center gap-1.5 border border-slate-700/80 transition-colors"
-                title="清空佇列中卡住的排隊項目"
+                icon={<Trash2 className="w-3.5 h-3.5 text-amber-500" />}
+                className="w-full text-xs"
               >
-                <Trash2 className="w-3.5 h-3.5 text-amber-400" />
-                <span>清空卡住的待同步佇列 ({syncStatus.pendingQueueCount})</span>
-              </button>
+                清空卡住的佇列 ({syncStatus.pendingQueueCount})
+              </Button>
             )}
 
             <Link
               to="/settings"
-              onClick={() => setIsOpen(false)}
-              className="w-full text-center text-[11px] text-slate-400 hover:text-sky-300 py-1 block transition-colors"
+              onClick={close}
+              className="block text-center text-[11px] text-stone-400 hover:text-teal-600 dark:hover:text-teal-400 pt-1"
             >
-              檢查 Google Apps Script 網址設定 ➔
+              設定 Google Apps Script 網址 ➔
             </Link>
           </div>
         </div>
       )}
-    </div>
+    </Popover>
   );
 };

@@ -1,17 +1,25 @@
 import React from 'react';
-import { 
-  Mountain, 
-  Sunrise, 
-  Camera, 
-  Sparkles, 
-  Clock, 
-  MapPin 
+import {
+  Sunrise,
+  Camera,
+  Sparkles,
+  Clock,
+  MapPin,
+  Settings,
 } from 'lucide-react';
 import { useTripStore } from '../../stores/tripStore';
+import { useActiveTrip } from '../../stores/selectors';
+import { hasModule } from '../../config/modules';
 import { getZermattSunriseTime } from '../../utils/dates';
+import { Card } from '../ui/Card';
+import { PageHeader } from '../ui/PageHeader';
+import { EmptyState } from '../ui/EmptyState';
+import { Button } from '../ui/Button';
 
 export const MatterhornPage: React.FC = () => {
+  const activeTrip = useActiveTrip();
   const { config } = useTripStore();
+  const isSwiss = hasModule(activeTrip?.modules, 'swiss');
   const sunriseTime = getZermattSunriseTime(config.startDate);
 
   // 攝影點清單
@@ -50,102 +58,118 @@ export const MatterhornPage: React.FC = () => {
     },
   ];
 
-  return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
-      {/* 頁面標題 */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-          <Mountain className="w-6 h-6 text-red-500" />
-          <span>陽台馬特洪金頂日出與攝影取景指南 (Matterhorn Guide)</span>
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-400">
-          策馬特基地 (Base 3) 專屬黃金日照金山攻略，以及世界級利菲爾湖名鏡拍攝秘訣。
-        </p>
+  if (!isSwiss) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
+        <EmptyState
+          title="此功能為「瑞士特色特輯」專屬模組"
+          description="當前選擇的旅遊計畫尚未啟用瑞士專屬模組。您可以在「設定 ➔ 基本與日程」中開啟瑞士特色模組以解鎖馬特洪峰黃金日出攻略。"
+          action={
+            <Button
+              variant="primary"
+              onClick={() => {
+                window.location.hash = '#settings';
+              }}
+            >
+              <Settings className="w-4 h-4 mr-1.5" />
+              <span>前往旅行設定啟用</span>
+            </Button>
+          }
+        />
       </div>
+    );
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      {/* 頁面標題 */}
+      <PageHeader
+        title="馬特洪金頂日出與攝影取景指南"
+        subtitle="策馬特基地 (Zermatt) 陽台日照金山攻略，以及世界級利菲爾湖名鏡拍攝秘訣"
+        emoji="🏔️"
+      />
 
       {/* 頂部：金頂日出倒數神級看板 */}
-      <div className="bg-gradient-to-r from-amber-950/70 via-slate-900 to-red-950/70 border border-amber-600/40 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-
+      <Card className="bg-gradient-to-r from-amber-500/10 via-[var(--color-card)] to-red-500/10 border-amber-500/30 p-6 sm:p-8 relative overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-widest">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs font-bold uppercase tracking-widest">
               <Sunrise className="w-4 h-4" />
-              <span>Base 3 (Zermatt) 陽台日出觀測預報</span>
+              <span>Zermatt 陽台日出觀測預報</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black text-white">
+            <h2 className="text-2xl sm:text-3xl font-black text-[var(--color-text)]">
               黃金馬特洪峰日出時刻 (Golden Sunrise)
             </h2>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
-              旅行月份（6月 / 7月）晨曦第一縷陽光預計於 <strong className="text-amber-300 font-mono text-base">{sunriseTime}</strong> 精確點燃馬特洪峰東壁刀削尖頂！請提前 15 分鐘（05:15）備妥腳架與熱茶守候。
+            <p className="text-xs sm:text-sm text-[var(--color-text-muted)] max-w-xl leading-relaxed">
+              晨曦第一縷陽光預計於 <strong className="text-amber-600 dark:text-amber-300 font-mono text-base">{sunriseTime}</strong> 精確點燃馬特洪峰東壁刀削尖頂！請提前 15 分鐘備妥腳架與熱茶守候。
             </p>
           </div>
 
           {/* 晨曦時鐘大方塊 */}
-          <div className="bg-slate-900/90 border border-amber-500/40 rounded-2xl p-4 sm:p-6 text-center shadow-xl shrink-0">
-            <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
+          <div className="bg-[var(--color-bg)] border border-amber-500/30 rounded-2xl p-4 sm:p-6 text-center shadow-lg shrink-0">
+            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block mb-1">
               推估日出時間
             </span>
-            <div className="text-3xl sm:text-4xl font-black text-amber-300 font-mono tracking-tight">
+            <div className="text-3xl sm:text-4xl font-black text-amber-600 dark:text-amber-300 font-mono tracking-tight">
               {sunriseTime}
             </div>
-            <span className="text-[11px] text-slate-400 mt-1 block">
+            <span className="text-[11px] text-[var(--color-text-muted)] mt-1 block">
               持續燃燒時間：約 15-20 分鐘
             </span>
           </div>
         </div>
 
         {/* 陽台拍攝 SOP 三步驟 */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6 pt-6 border-t border-amber-900/50 text-xs">
-          <div className="flex items-start gap-2 text-slate-200">
-            <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-bold flex items-center justify-center shrink-0">1</span>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6 pt-6 border-t border-[var(--color-border)] text-xs">
+          <div className="flex items-start gap-2 text-[var(--color-text)]">
+            <span className="w-5 h-5 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center shrink-0">1</span>
             <div>
-              <strong className="text-amber-300 block mb-0.5">前晚設定鬧鐘 (05:10)</strong>
-              <span>將手機/相機電池充飽電，陽台落地窗先開啟微縫防止室內外溫差霧氣。</span>
+              <strong className="text-amber-600 dark:text-amber-300 block mb-0.5">前晚設定鬧鐘 (提前20分)</strong>
+              <span className="text-[var(--color-text-muted)]">手機與相機充飽電，陽台落地窗先開啟微縫防止室內外溫差起霧。</span>
             </div>
           </div>
 
-          <div className="flex items-start gap-2 text-slate-200">
-            <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-bold flex items-center justify-center shrink-0">2</span>
+          <div className="flex items-start gap-2 text-[var(--color-text)]">
+            <span className="w-5 h-5 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center shrink-0">2</span>
             <div>
-              <strong className="text-amber-300 block mb-0.5">對焦與測光鎖定 (05:25)</strong>
-              <span>手機鏡頭長按馬特洪尖端鎖定 AE/AF，手動稍微下拉小太陽降低曝光半檔防過曝。</span>
+              <strong className="text-amber-600 dark:text-amber-300 block mb-0.5">對焦與測光鎖定</strong>
+              <span className="text-[var(--color-text-muted)]">長按馬特洪尖端鎖定 AE/AF，手動稍微下拉小太陽降低曝光半檔防過曝。</span>
             </div>
           </div>
 
-          <div className="flex items-start gap-2 text-slate-200">
-            <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-bold flex items-center justify-center shrink-0">3</span>
+          <div className="flex items-start gap-2 text-[var(--color-text)]">
+            <span className="w-5 h-5 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center shrink-0">3</span>
             <div>
-              <strong className="text-amber-300 block mb-0.5">錄製 4K 縮時攝影 (05:30)</strong>
-              <span>切換手機「縮時攝影 (Time-lapse)」錄下整座山峰從暗藍轉變為熊熊金火的史詩畫面。</span>
+              <strong className="text-amber-600 dark:text-amber-300 block mb-0.5">錄製 4K 縮時攝影</strong>
+              <span className="text-[var(--color-text-muted)]">切換手機「縮時攝影 (Time-lapse)」錄下整座山峰從暗藍轉變為金黃的史詩瞬間。</span>
             </div>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* 4 大封神攝影點機位圖鑑 */}
       <div className="space-y-4">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <Camera className="w-5 h-5 text-sky-400" />
+        <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+          <Camera className="w-5 h-5 text-sky-500" />
           <span>策馬特 4 大世界級神話攝影點機位指南</span>
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {photoSpots.map((spot, idx) => (
-            <div
+            <Card
               key={idx}
-              className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3 hover:border-slate-700 transition-all flex flex-col justify-between"
+              className="p-5 space-y-3 flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-start justify-between gap-2 mb-1">
-                  <h4 className="text-sm sm:text-base font-bold text-white">
+                  <h4 className="text-sm sm:text-base font-bold text-[var(--color-text)]">
                     {spot.title}
                   </h4>
                   <div className="flex gap-1 flex-wrap">
                     {spot.tags.map((t, i) => (
                       <span
                         key={i}
-                        className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700"
+                        className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-bg-subtle)] text-[var(--color-text-muted)] border border-[var(--color-border)]"
                       >
                         {t}
                       </span>
@@ -153,33 +177,33 @@ export const MatterhornPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-xs text-sky-400 mb-2">
+                <div className="flex items-center gap-1.5 text-xs text-sky-600 dark:text-sky-400 mb-2">
                   <MapPin className="w-3.5 h-3.5 shrink-0" />
                   <span>{spot.location}</span>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-xs text-amber-300 font-mono mb-3">
+                <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-mono mb-3">
                   <Clock className="w-3.5 h-3.5 shrink-0" />
                   <span>{spot.time}</span>
                 </div>
 
                 {/* 相機設定參數與取景技巧 */}
-                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 space-y-1 text-xs">
-                  <span className="font-bold text-slate-300 flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <div className="bg-[var(--color-bg-subtle)] p-3 rounded-xl border border-[var(--color-border)] space-y-1 text-xs">
+                  <span className="font-bold text-[var(--color-text)] flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                     <span>專業取景與曝光參數：</span>
                   </span>
-                  <p className="text-slate-400 leading-relaxed">
+                  <p className="text-[var(--color-text-muted)] leading-relaxed">
                     {spot.cameraTips}
                   </p>
                 </div>
               </div>
 
               {/* 亮點總結 */}
-              <p className="text-xs text-slate-300 border-t border-slate-800/80 pt-2 leading-relaxed">
+              <p className="text-xs text-[var(--color-text-muted)] border-t border-[var(--color-border)] pt-2 leading-relaxed font-medium">
                 ★ {spot.highlights}
               </p>
-            </div>
+            </Card>
           ))}
         </div>
       </div>

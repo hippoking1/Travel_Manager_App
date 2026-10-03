@@ -1,8 +1,9 @@
 import { mutateSheet, isGasConfigured } from './sheetApi';
-import type { SyncStatusState } from '../types';
+import type { SyncStatusState, DayItinerary } from '../types';
 
 export interface QueueItem {
   id: string;
+  tripId?: string;
   timestamp: string;
   sheet: string;
   action: 'APPEND' | 'UPDATE' | 'DELETE';
@@ -17,6 +18,7 @@ class SyncManager {
   private listeners = new Set<(status: SyncStatusState) => void>();
   private lastError: string | null = null;
   private lastSyncedAt: string | null = null;
+  private itineraryDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.lastSyncedAt = localStorage.getItem('travel_last_synced_time');
@@ -57,16 +59,17 @@ class SyncManager {
   public enqueue(
     sheet: string,
     action: 'APPEND' | 'UPDATE' | 'DELETE',
-    payload: Record<string, unknown>
+    payload: Record<string, unknown>,
+    tripId?: string
   ) {
-    // 若未設定雲端，純本機使用，不硬塞入無效隊列造成一直顯示待同步
     if (!isGasConfigured()) {
       return;
     }
 
     const queue = this.getQueue();
     queue.push({
-      id: crypto.randomUUID ? crypto.randomUUID() : `sync_${Date.now()}_${Math.random()}`,
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sync_${Date.now()}_${Math.random()}`,
+      tripId,
       timestamp: new Date().toISOString(),
       sheet,
       action,
@@ -76,7 +79,7 @@ class SyncManager {
     this.saveQueue(queue);
 
     // 觸發同步
-    if (navigator.onLine) {
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
       this.flushQueue();
     }
   }
@@ -88,7 +91,6 @@ class SyncManager {
     if (queue.length === 0) return;
 
     if (!isGasConfigured()) {
-      // 網址無效或未設定，清空無效排隊避免一直卡在待同步
       this.clearQueue();
       return;
     }
@@ -101,7 +103,7 @@ class SyncManager {
 
     for (const item of queue) {
       try {
-        const res = await mutateSheet(item.sheet, item.action, item.payload);
+        const res = await mutateSheet(item.sheet, item.action, item.payload, item.tripId);
         if (!res.success) {
           throw new Error(res.error || 'Google 試算表寫入失敗');
         }
@@ -125,6 +127,37 @@ class SyncManager {
     }
 
     this.notify();
+  }
+
+  /** 防抖同步日程 Itinerary 到 Google Sheets */
+  public debouncedSyncItinerary(tripId: string, day: DayItinerary) {
+    if (!isGasConfigured()) return;
+
+    if (this.itineraryDebounceTimer) {
+      clearTimeout(this.itineraryDebounceTimer);
+    }
+
+    this.itineraryDebounceTimer = setTimeout(() => {
+      this.enqueue(
+        'Itinerary',
+        'UPDATE',
+        {
+          id: day.id || `day_${day.day}`,
+          dayId: day.id || `day_${day.day}`,
+          updates: {
+            dayId: day.id || `day_${day.day}`,
+            day: day.day,
+            baseId: day.baseId,
+            title: day.title,
+            subtitle: day.subtitle,
+            highlights: (day.highlights || []).join('; '),
+            timeBlocksJson: JSON.stringify(day.timeBlocks || []),
+            foodNotesJson: JSON.stringify(day.foodNotes || []),
+          },
+        },
+        tripId
+      );
+    }, 1500);
   }
 
   /** 訂閱同步狀態 */

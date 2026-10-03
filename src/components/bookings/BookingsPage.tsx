@@ -1,778 +1,965 @@
 import React, { useState } from 'react';
 import { 
   Building2, 
+  Plane, 
   Train, 
-  Key, 
-  Trash2, 
+  Car, 
+  Ship, 
+  Mountain, 
   Plus, 
-  Edit3, 
-  MapPin, 
+  Edit2, 
+  Trash2, 
   Calendar, 
-  AlertCircle, 
-  ShieldCheck,
-  X
+  MapPin, 
+  ExternalLink, 
+  Clock, 
+  Key, 
+  ChevronDown, 
+  ChevronUp
 } from 'lucide-react';
-import { useTripStore } from '../../stores/tripStore';
+import { parseISO, differenceInDays } from 'date-fns';
 import type { AccommodationBooking, TransportBooking } from '../../types';
+import { useTripStore } from '../../stores/tripStore';
+import { useActiveTrip, useBases, useConfig } from '../../stores/selectors';
+import { formatMoney } from '../../utils/currency';
+import { useConfirm } from '../ui/ConfirmDialog';
+import { Modal } from '../ui/Modal';
+import { Input, Select } from '../ui/Field';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { SegmentedControl } from '../ui/SegmentedControl';
+import { EmptyState } from '../ui/EmptyState';
 
 export const BookingsPage: React.FC = () => {
+  const activeTrip = useActiveTrip();
+  const bases = useBases();
+  const config = useConfig();
   const { 
-    accommodations, 
-    transports, 
     addAccommodation, 
     updateAccommodation, 
     deleteAccommodation,
     addTransport,
     updateTransport,
-    deleteTransport
+    deleteTransport 
   } = useTripStore();
+  const confirm = useConfirm();
 
   const [activeTab, setActiveTab] = useState<'accommodations' | 'transports'>('accommodations');
+  const [expandedCardIds, setExpandedCardIds] = useState<string[]>([]);
 
-  // Modal 狀態
+  // 住宿 Modal 狀態
   const [showAccModal, setShowAccModal] = useState(false);
-  const [editingAccId, setEditingAccId] = useState<string | null>(null);
-  const [accForm, setAccForm] = useState<Partial<AccommodationBooking>>({
-    baseId: 'luzern',
-    baseNameZh: '盧塞恩 (琉森)',
-    hotelName: '',
-    roomType: '',
-    checkInDate: '2027-06-15',
-    checkOutDate: '2027-06-19',
-    nights: 4,
-    bookingPlatform: 'Booking.com',
-    confirmationCode: '',
-    totalPrice: 1200,
-    currency: 'CHF',
-    paymentStatus: 'paid',
-    paymentStatusLabel: '已線上付清',
-    address: '',
-    checkInTimeNotice: '入住 15:00 起 ｜ 退房 10:00 前',
-    keyPickupNotice: '門口密碼盒 (Keybox)，密碼請洽房東',
-    garbageRulesNotice: '請使用當地專用垃圾袋，垃圾與玻璃瓶分開回收',
-    kitchenRulesNotice: '退房前請清空冰箱並開啟洗碗機',
-    notes: '',
-  });
+  const [editingAcc, setEditingAcc] = useState<AccommodationBooking | null>(null);
+  const [accBaseId, setAccBaseId] = useState('');
+  const [accHotelName, setAccHotelName] = useState('');
+  const [accRoomType, setAccRoomType] = useState('');
+  const [accCheckIn, setAccCheckIn] = useState('');
+  const [accCheckOut, setAccCheckOut] = useState('');
+  const [accPlatform, setAccPlatform] = useState('Booking.com');
+  const [accCode, setAccCode] = useState('');
+  const [accPrice, setAccPrice] = useState(0);
+  const [accCurrency, setAccCurrency] = useState(config.currencies.primary || 'CHF');
+  const [accPaymentStatus, setAccPaymentStatus] = useState<'paid' | 'pay_at_property' | 'deposit_paid'>('paid');
+  const [accAddress, setAccAddress] = useState('');
+  const [accPhone, setAccPhone] = useState('');
+  const [accMapsUrl, setAccMapsUrl] = useState('');
+  const [accCheckInNotice, setAccCheckInNotice] = useState('入住 15:00 後 / 退房 10:00 前');
+  const [accKeyNotice, setAccKeyNotice] = useState('密碼鑰匙盒或前台辦理');
+  const [accGarbageNotice, setAccGarbageNotice] = useState('');
+  const [accKitchenNotice, setAccKitchenNotice] = useState('');
+  const [accNotes, setAccNotes] = useState('');
 
+  // 交通 Modal 狀態
   const [showTransModal, setShowTransModal] = useState(false);
-  const [editingTransId, setEditingTransId] = useState<string | null>(null);
-  const [transForm, setTransForm] = useState<Partial<TransportBooking>>({
-    category: 'scenic_train',
-    categoryLabel: '景觀列車',
-    title: '',
-    routeFrom: '',
-    routeTo: '',
-    departureTime: '2027-06-15 09:00',
-    operatorNumber: '',
-    bookingReference: '',
-    seatsInfo: '',
-    ticketType: 'STP 憑證免費涵蓋',
-    platformNotice: '請提前 10-15 分鐘抵達月台候車',
-    luggageNotice: '大件行李置於車廂玄關專屬大行李架',
-    boardingNotice: '驗票時出示護照正本 + STP QR Code',
-    notes: '',
-  });
+  const [editingTrans, setEditingTrans] = useState<TransportBooking | null>(null);
+  const [transCategory, setTransCategory] = useState<TransportBooking['category']>('scenic_train');
+  const [transTitle, setTransTitle] = useState('');
+  const [transFrom, setTransFrom] = useState('');
+  const [transTo, setTransTo] = useState('');
+  const [transDepTime, setTransDepTime] = useState('');
+  const [transArrTime, setTransArrTime] = useState('');
+  const [transNumber, setTransNumber] = useState('');
+  const [transRef, setTransRef] = useState('');
+  const [transSeats, setTransSeats] = useState('');
+  const [transTicketType, setTransTicketType] = useState('標準車票 / 通票');
+  const [transPrice, setTransPrice] = useState(0);
+  const [transCurrency, setTransCurrency] = useState(config.currencies.primary || 'CHF');
+  const [transPlatformNotice, setTransPlatformNotice] = useState('');
+  const [transLuggageNotice, setTransLuggageNotice] = useState('');
+  const [transBoardingNotice, setTransBoardingNotice] = useState('');
+  const [transNotes, setTransNotes] = useState('');
 
-  // 打開新增/編輯住宿
-  const handleOpenAccModal = (acc?: AccommodationBooking) => {
-    if (acc) {
-      setEditingAccId(acc.id);
-      setAccForm(acc);
+  const accommodations = activeTrip.accommodations || [];
+  const transports = activeTrip.transports || [];
+
+  const toggleExpandCard = (id: string) => {
+    setExpandedCardIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  // 開啟住宿新增/編輯
+  const handleOpenAcc = (item?: AccommodationBooking) => {
+    if (item) {
+      setEditingAcc(item);
+      setAccBaseId(item.baseId);
+      setAccHotelName(item.hotelName);
+      setAccRoomType(item.roomType);
+      setAccCheckIn(item.checkInDate);
+      setAccCheckOut(item.checkOutDate);
+      setAccPlatform(item.bookingPlatform);
+      setAccCode(item.confirmationCode);
+      setAccPrice(item.totalPrice);
+      setAccCurrency(item.currency || config.currencies.primary || 'CHF');
+      setAccPaymentStatus(item.paymentStatus || 'paid');
+      setAccAddress(item.address);
+      setAccPhone(item.contactPhone || '');
+      setAccMapsUrl(item.googleMapsUrl || '');
+      setAccCheckInNotice(item.checkInTimeNotice || '入住 15:00 後 / 退房 10:00 前');
+      setAccKeyNotice(item.keyPickupNotice || '密碼鑰匙盒或前台辦理');
+      setAccGarbageNotice(item.garbageRulesNotice || '');
+      setAccKitchenNotice(item.kitchenRulesNotice || '');
+      setAccNotes(item.notes || '');
     } else {
-      setEditingAccId(null);
-      setAccForm({
-        baseId: 'luzern',
-        baseNameZh: '盧塞恩 (琉森)',
-        hotelName: '',
-        roomType: '大坪數景觀家庭房 (7人入住)',
-        checkInDate: '2027-06-15',
-        checkOutDate: '2027-06-19',
-        nights: 4,
-        bookingPlatform: 'Booking.com',
-        confirmationCode: '',
-        totalPrice: 1200,
-        currency: 'CHF',
-        paymentStatus: 'paid',
-        paymentStatusLabel: '已付清',
-        address: '',
-        checkInTimeNotice: '入住 15:00 起 ｜ 退房 10:00 前',
-        keyPickupNotice: '大門密碼盒 (Keybox)，密碼請洽詢屋主',
-        garbageRulesNotice: '請遵照瑞士市府專用收費垃圾袋規定，生鮮廚餘請分開',
-        kitchenRulesNotice: '碗盤置入洗碗機運轉，退房前清空冰箱',
-        notes: '',
-      });
+      setEditingAcc(null);
+      setAccBaseId(bases[0]?.id || 'base-1');
+      setAccHotelName('');
+      setAccRoomType('標準雙人房 / 家庭公寓');
+      setAccCheckIn(config.startDate || '');
+      setAccCheckOut('');
+      setAccPlatform('Booking.com');
+      setAccCode('');
+      setAccPrice(0);
+      setAccCurrency(config.currencies.primary || 'CHF');
+      setAccPaymentStatus('paid');
+      setAccAddress('');
+      setAccPhone('');
+      setAccMapsUrl('');
+      setAccCheckInNotice('入住 15:00 後 / 退房 10:00 前');
+      setAccKeyNotice('前台辦理或門口密碼盒');
+      setAccGarbageNotice('');
+      setAccKitchenNotice('');
+      setAccNotes('');
     }
     setShowAccModal(true);
   };
 
+  // 儲存住宿
   const handleSaveAcc = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!accForm.hotelName) return;
+    if (!accHotelName.trim()) return;
 
-    if (editingAccId) {
-      updateAccommodation(editingAccId, accForm);
+    let nights = 1;
+    if (accCheckIn && accCheckOut) {
+      try {
+        const diff = differenceInDays(parseISO(accCheckOut), parseISO(accCheckIn));
+        nights = Math.max(1, diff);
+      } catch {
+        nights = 1;
+      }
+    }
+
+    const baseObj = bases.find((b) => b.id === accBaseId);
+    const baseNameZh = baseObj ? baseObj.nameZh : '自選基地';
+
+    const paymentLabel =
+      accPaymentStatus === 'paid'
+        ? '已線上全額付清'
+        : accPaymentStatus === 'pay_at_property'
+        ? '抵達入住現場支付'
+        : '已付部分訂金';
+
+    const accData: Omit<AccommodationBooking, 'id'> = {
+      baseId: accBaseId,
+      baseNameZh,
+      hotelName: accHotelName.trim(),
+      roomType: accRoomType.trim(),
+      checkInDate: accCheckIn,
+      checkOutDate: accCheckOut,
+      nights,
+      bookingPlatform: accPlatform.trim(),
+      confirmationCode: accCode.trim(),
+      totalPrice: Number(accPrice) || 0,
+      currency: accCurrency,
+      paymentStatus: accPaymentStatus,
+      paymentStatusLabel: paymentLabel,
+      address: accAddress.trim(),
+      contactPhone: accPhone.trim() || undefined,
+      googleMapsUrl: accMapsUrl.trim() || undefined,
+      checkInTimeNotice: accCheckInNotice.trim(),
+      keyPickupNotice: accKeyNotice.trim(),
+      garbageRulesNotice: accGarbageNotice.trim(),
+      kitchenRulesNotice: accKitchenNotice.trim(),
+      notes: accNotes.trim() || undefined,
+    };
+
+    if (editingAcc) {
+      updateAccommodation(editingAcc.id, accData);
     } else {
-      addAccommodation(accForm as AccommodationBooking);
+      addAccommodation(accData);
     }
     setShowAccModal(false);
   };
 
-  // 打開新增/編輯交通
-  const handleOpenTransModal = (trans?: TransportBooking) => {
-    if (trans) {
-      setEditingTransId(trans.id);
-      setTransForm(trans);
+  const handleDeleteAcc = async (id: string, name: string) => {
+    const ok = await confirm({
+      title: `確定要刪除「${name}」的住宿預訂紀錄嗎？`,
+      danger: true,
+      confirmLabel: '刪除住宿預訂',
+    });
+    if (ok) {
+      deleteAccommodation(id);
+    }
+  };
+
+  // 開啟交通新增/編輯
+  const handleOpenTrans = (item?: TransportBooking) => {
+    if (item) {
+      setEditingTrans(item);
+      setTransCategory(item.category);
+      setTransTitle(item.title);
+      setTransFrom(item.routeFrom);
+      setTransTo(item.routeTo);
+      setTransDepTime(item.departureTime);
+      setTransArrTime(item.arrivalTime || '');
+      setTransNumber(item.operatorNumber);
+      setTransRef(item.bookingReference);
+      setTransSeats(item.seatsInfo || '');
+      setTransTicketType(item.ticketType);
+      setTransPrice(item.totalPrice || 0);
+      setTransCurrency(item.currency || config.currencies.primary || 'CHF');
+      setTransPlatformNotice(item.platformNotice || '');
+      setTransLuggageNotice(item.luggageNotice || '');
+      setTransBoardingNotice(item.boardingNotice || '');
+      setTransNotes(item.notes || '');
     } else {
-      setEditingTransId(null);
-      setTransForm({
-        category: 'scenic_train',
-        categoryLabel: '景觀列車',
-        title: '',
-        routeFrom: '',
-        routeTo: '',
-        departureTime: '2027-06-15 09:00',
-        operatorNumber: '',
-        bookingReference: '',
-        seatsInfo: '',
-        ticketType: 'STP 免費涵蓋',
-        platformNotice: '提前 10-15 分鐘抵達月台',
-        luggageNotice: '大件行李置於車廂玄關專屬大行李架',
-        boardingNotice: '出示護照正本 + STP QR Code',
-        notes: '',
-      });
+      setEditingTrans(null);
+      setTransCategory('scenic_train');
+      setTransTitle('');
+      setTransFrom('');
+      setTransTo('');
+      setTransDepTime('');
+      setTransArrTime('');
+      setTransNumber('');
+      setTransRef('');
+      setTransSeats('');
+      setTransTicketType('電子票券 / 通票涵蓋');
+      setTransPrice(0);
+      setTransCurrency(config.currencies.primary || 'CHF');
+      setTransPlatformNotice('');
+      setTransLuggageNotice('');
+      setTransBoardingNotice('');
+      setTransNotes('');
     }
     setShowTransModal(true);
   };
 
+  // 儲存交通
   const handleSaveTrans = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!transForm.title) return;
+    if (!transTitle.trim()) return;
 
-    if (editingTransId) {
-      updateTransport(editingTransId, transForm);
+    const catLabels: Record<TransportBooking['category'], string> = {
+      flight: '國際 / 國內航班',
+      scenic_train: '景觀全景列車',
+      mountain_rail: '高山齒軌登山火車',
+      cable_car: '全景空中纜車',
+      ferry: '湖泊遊船 / 渡輪',
+      car_rental: '自駕租車 / 包車',
+    };
+
+    const transData: Omit<TransportBooking, 'id'> = {
+      category: transCategory,
+      categoryLabel: catLabels[transCategory] || '交通安排',
+      title: transTitle.trim(),
+      routeFrom: transFrom.trim(),
+      routeTo: transTo.trim(),
+      departureTime: transDepTime.trim(),
+      arrivalTime: transArrTime.trim() || undefined,
+      operatorNumber: transNumber.trim(),
+      bookingReference: transRef.trim(),
+      seatsInfo: transSeats.trim() || undefined,
+      ticketType: transTicketType.trim(),
+      totalPrice: Number(transPrice) || 0,
+      currency: transCurrency,
+      platformNotice: transPlatformNotice.trim() || undefined,
+      luggageNotice: transLuggageNotice.trim() || undefined,
+      boardingNotice: transBoardingNotice.trim() || undefined,
+      notes: transNotes.trim() || undefined,
+    };
+
+    if (editingTrans) {
+      updateTransport(editingTrans.id, transData);
     } else {
-      addTransport(transForm as TransportBooking);
+      addTransport(transData);
     }
     setShowTransModal(false);
   };
 
+  const handleDeleteTrans = async (id: string, title: string) => {
+    const ok = await confirm({
+      title: `確定要刪除「${title}」的交通紀錄嗎？`,
+      danger: true,
+      confirmLabel: '刪除交通紀錄',
+    });
+    if (ok) {
+      deleteTransport(id);
+    }
+  };
+
+  const getTransportCategoryIcon = (category: TransportBooking['category']) => {
+    switch (category) {
+      case 'flight':
+        return <Plane className="w-4 h-4 text-sky-600 dark:text-sky-400" />;
+      case 'scenic_train':
+      case 'mountain_rail':
+        return <Mountain className="w-4 h-4 text-amber-600 dark:text-amber-400" />;
+      case 'ferry':
+        return <Ship className="w-4 h-4 text-blue-600 dark:text-blue-400" />;
+      case 'car_rental':
+        return <Car className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />;
+      case 'cable_car':
+        return <Mountain className="w-4 h-4 text-teal-600 dark:text-teal-400" />;
+      default:
+        return <Train className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />;
+    }
+  };
+
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-      {/* 標題與簡介 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7">
+      {/* 頁首 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-            <Building2 className="w-6 h-6 text-sky-400" />
-            <span>住宿與交通安排規劃 (訂單管理與入住須知)</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-400">
-            完整管理 4 大特色基地木屋訂單、垃圾分類/鑰匙須知，以及機票、冰河列車與瑞士通票劃位憑證。
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-2xl">🏨</span>
+            <h1 className="text-xl sm:text-2xl font-black text-stone-900 dark:text-stone-100 tracking-tight">
+              住宿與車票須知管理
+            </h1>
+          </div>
+          <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
+            匯整全旅程飯店、公寓密碼鎖、行李放置與機票車票預約確認號
           </p>
         </div>
 
-        {/* 頁籤切換：住宿 vs 交通 */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-2xl shrink-0 self-start sm:self-auto">
-          <button
-            onClick={() => setActiveTab('accommodations')}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
-              activeTab === 'accommodations'
-                ? 'bg-sky-600 text-white shadow-lg shadow-sky-950'
-                : 'text-slate-400 hover:text-white'
-            }`}
+        <div className="flex items-center gap-2.5">
+          <SegmentedControl<'accommodations' | 'transports'>
+            value={activeTab}
+            onChange={(val) => setActiveTab(val)}
+            options={[
+              { value: 'accommodations', label: `住宿預訂 (${accommodations.length})`, icon: <Building2 className="w-4 h-4" /> },
+              { value: 'transports', label: `交通車票 (${transports.length})`, icon: <Plane className="w-4 h-4" /> },
+            ]}
+          />
+
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => (activeTab === 'accommodations' ? handleOpenAcc() : handleOpenTrans())}
+            icon={<Plus className="w-4 h-4" />}
           >
-            <Building2 className="w-4 h-4" />
-            <span>🏨 住宿預訂 ({accommodations.length})</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('transports')}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
-              activeTab === 'transports'
-                ? 'bg-red-600 text-white shadow-lg shadow-red-950'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Train className="w-4 h-4" />
-            <span>🚆 交通與機票 ({transports.length})</span>
-          </button>
+            {activeTab === 'accommodations' ? '新增住宿' : '新增交通'}
+          </Button>
         </div>
       </div>
 
-      {/* ============================================================ */}
-      {/* TAB 1: 住宿預訂與入住須知 (Accommodations) */}
-      {/* ============================================================ */}
+      {/* 住宿預訂清單 */}
       {activeTab === 'accommodations' && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              瑞士 4 大基地住宿清單 (已排定全套家庭公寓與木屋)
-            </span>
-            <button
-              onClick={() => handleOpenAccModal()}
-              className="bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all shadow-md flex items-center gap-1"
-            >
-              <Plus className="w-4 h-4" />
-              <span>新增住宿安排</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 gap-5">
-            {accommodations.map((acc) => (
-              <div
-                key={acc.id}
-                className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 hover:border-slate-700 transition-all"
-              >
-                {/* 頂部：基地 + 飯店名稱 + 金額 + 操作 */}
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-slate-800 pb-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+        <div className="space-y-4">
+          {accommodations.map((acc) => {
+            const isExpanded = expandedCardIds.includes(acc.id);
+            return (
+              <Card key={acc.id} className="transition-all hover:border-stone-300 dark:hover:border-stone-700">
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                  {/* 左側重點資訊 */}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
                         {acc.baseNameZh}
                       </span>
-                      <span className="text-xs text-slate-400 font-mono">
-                        {acc.bookingPlatform} ｜ 訂單編號：{acc.confirmationCode}
+                      <span className="text-xs text-stone-500 font-mono">
+                        {acc.bookingPlatform} • 代號: {acc.confirmationCode}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300">
+                        {acc.paymentStatusLabel}
                       </span>
                     </div>
-                    <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+
+                    <h3 className="text-base sm:text-lg font-bold text-stone-900 dark:text-stone-100">
                       {acc.hotelName}
                     </h3>
-                    <p className="text-xs sm:text-sm text-slate-300 mt-1">
+                    <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 font-medium">
                       {acc.roomType}
                     </p>
-                  </div>
 
-                  {/* 房費與付款狀態 + 動作按鈕 */}
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
-                    <div className="text-left sm:text-right">
-                      <div className="text-base sm:text-lg font-black text-emerald-400 font-mono">
-                        {acc.currency} {acc.totalPrice.toLocaleString()}
-                      </div>
-                      <span className="text-[11px] text-slate-400 block">
-                        共 {acc.nights} 晚 ｜ {acc.paymentStatusLabel}
+                    <div className="flex items-center gap-4 text-xs text-stone-500 dark:text-stone-400 flex-wrap pt-1 font-mono">
+                      <span className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-teal-600" />
+                        <span>入住: {acc.checkInDate} ➔ 退房: {acc.checkOutDate} ({acc.nights} 晚)</span>
                       </span>
-                    </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleOpenAccModal(acc)}
-                        className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-                        title="編輯住宿"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => deleteAccommodation(acc.id)}
-                        className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-colors"
-                        title="刪除住宿"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 住宿日期與地址聯絡 */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-950 p-3.5 rounded-2xl border border-slate-800/80">
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <Calendar className="w-4 h-4 text-sky-400 shrink-0" />
-                    <div>
-                      <span className="text-slate-500 block">入住至退房</span>
-                      <span className="font-semibold text-white font-mono">{acc.checkInDate} ➔ {acc.checkOutDate}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-slate-300 sm:col-span-2">
-                    <MapPin className="w-4 h-4 text-red-400 shrink-0" />
-                    <div className="truncate flex-1">
-                      <span className="text-slate-500 block">地址與聯絡</span>
-                      <span className="text-slate-200">{acc.address}</span>
-                      {acc.contactPhone && (
-                        <span className="ml-2 text-sky-400 font-mono">({acc.contactPhone})</span>
+                      {acc.totalPrice > 0 && (
+                        <span className="font-bold text-stone-900 dark:text-stone-100">
+                          總計: {formatMoney(acc.totalPrice, acc.currency)}
+                        </span>
                       )}
                     </div>
+
+                    {acc.address && (
+                      <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400 pt-0.5">
+                        <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                        <span className="truncate">{acc.address}</span>
+                        {acc.googleMapsUrl && (
+                          <a
+                            href={acc.googleMapsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-teal-600 hover:underline inline-flex items-center gap-0.5 shrink-0"
+                          >
+                            <span>地圖導航</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 右側操作按鈕 */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenAcc(acc)}
+                      icon={<Edit2 className="w-3.5 h-3.5" />}
+                    >
+                      編輯
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteAcc(acc.id, acc.hotelName)}
+                      icon={<Trash2 className="w-3.5 h-3.5 text-red-500" />}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleExpandCard(acc.id)}
+                      icon={isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    >
+                      {isExpanded ? '收起須知' : '入住須知'}
+                    </Button>
                   </div>
                 </div>
 
-                {/* 核心需求：4 大重要入住與使用須知卡片 */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                  {/* 1. 鑰匙領取與時間須知 */}
-                  <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3.5 space-y-1.5 text-xs">
-                    <div className="font-bold text-amber-300 flex items-center gap-1.5">
-                      <Key className="w-4 h-4 text-amber-400" />
-                      <span>鑰匙領取與入住手續</span>
-                    </div>
-                    <p className="text-slate-300 leading-relaxed font-mono">
-                      {acc.keyPickupNotice}
-                    </p>
-                    <div className="text-[11px] text-slate-500">
-                      ⏰ {acc.checkInTimeNotice}
-                    </div>
-                  </div>
+                {/* 展開入住須知 */}
+                {isExpanded && (
+                  <div className="mt-4 pt-4 border-t border-stone-100 dark:border-stone-800 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {acc.checkInTimeNotice && (
+                      <div className="p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/60 dark:border-stone-800 space-y-1">
+                        <span className="font-bold text-stone-800 dark:text-stone-200 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-teal-600" />
+                          <span>入住 / 退房時間</span>
+                        </span>
+                        <p className="text-stone-600 dark:text-stone-400">{acc.checkInTimeNotice}</p>
+                      </div>
+                    )}
 
-                  {/* 2. 垃圾分類專用袋須知 */}
-                  <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3.5 space-y-1.5 text-xs">
-                    <div className="font-bold text-emerald-300 flex items-center gap-1.5">
-                      <Trash2 className="w-4 h-4 text-emerald-400" />
-                      <span>瑞士嚴格垃圾分類規定</span>
-                    </div>
-                    <p className="text-slate-300 leading-relaxed">
-                      {acc.garbageRulesNotice}
-                    </p>
-                  </div>
+                    {acc.keyPickupNotice && (
+                      <div className="p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/60 dark:border-stone-800 space-y-1">
+                        <span className="font-bold text-stone-800 dark:text-stone-200 flex items-center gap-1.5">
+                          <Key className="w-3.5 h-3.5 text-amber-500" />
+                          <span>鑰匙領取 / 門禁密碼</span>
+                        </span>
+                        <p className="text-stone-600 dark:text-stone-400 font-mono">{acc.keyPickupNotice}</p>
+                      </div>
+                    )}
 
-                  {/* 3. 廚房自煮與退房清潔 */}
-                  <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3.5 space-y-1.5 text-xs">
-                    <div className="font-bold text-purple-300 flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-purple-400" />
-                      <span>廚房自煮與退房清潔規範</span>
-                    </div>
-                    <p className="text-slate-300 leading-relaxed">
-                      {acc.kitchenRulesNotice}
-                    </p>
-                  </div>
+                    {acc.garbageRulesNotice && (
+                      <div className="p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/60 dark:border-stone-800 space-y-1">
+                        <span className="font-bold text-stone-800 dark:text-stone-200">垃圾分類與丟棄須知</span>
+                        <p className="text-stone-600 dark:text-stone-400">{acc.garbageRulesNotice}</p>
+                      </div>
+                    )}
 
-                  {/* 4. 其他專屬須知備忘 */}
-                  <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3.5 space-y-1.5 text-xs">
-                    <div className="font-bold text-sky-300 flex items-center gap-1.5">
-                      <AlertCircle className="w-4 h-4 text-sky-400" />
-                      <span>房屋特色與周邊備忘</span>
-                    </div>
-                    <p className="text-slate-300 leading-relaxed">
-                      {acc.notes || '無額外備註'}
-                    </p>
+                    {acc.kitchenRulesNotice && (
+                      <div className="p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/60 dark:border-stone-800 space-y-1">
+                        <span className="font-bold text-stone-800 dark:text-stone-200">廚房與退房復原須知</span>
+                        <p className="text-stone-600 dark:text-stone-400">{acc.kitchenRulesNotice}</p>
+                      </div>
+                    )}
+
+                    {acc.notes && (
+                      <div className="p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/60 dark:border-stone-800 space-y-1 sm:col-span-2">
+                        <span className="font-bold text-stone-800 dark:text-stone-200">其他備忘筆記</span>
+                        <p className="text-stone-600 dark:text-stone-400">{acc.notes}</p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                )}
+              </Card>
+            );
+          })}
+
+          {accommodations.length === 0 && (
+            <EmptyState
+              icon={<Building2 className="w-6 h-6" />}
+              title="尚未建立任何住宿預訂資料"
+              description="點擊右上角「新增住宿」即可記錄各大飯店、公寓門鎖密碼與入住規範。"
+              action={
+                <Button variant="primary" size="sm" onClick={() => handleOpenAcc()}>
+                  新增第一筆住宿
+                </Button>
+              }
+            />
+          )}
         </div>
       )}
 
-      {/* ============================================================ */}
-      {/* TAB 2: 交通安排與乘車須知 (Transportation) */}
-      {/* ============================================================ */}
+      {/* 交通預訂清單 */}
       {activeTab === 'transports' && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              全線機票、景觀列車、登山鐵道與通票安排
-            </span>
-            <button
-              onClick={() => handleOpenTransModal()}
-              className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all shadow-md flex items-center gap-1"
-            >
-              <Plus className="w-4 h-4" />
-              <span>新增交通安排</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 gap-5">
-            {transports.map((trans) => (
-              <div
-                key={trans.id}
-                className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 hover:border-slate-700 transition-all"
-              >
-                {/* 頂部標題 */}
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-slate-800 pb-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/20 text-red-300 border border-red-500/30 flex items-center gap-1">
-                        <Train className="w-3.5 h-3.5" />
-                        <span>{trans.categoryLabel}</span>
+        <div className="space-y-4">
+          {transports.map((trans) => {
+            const isExpanded = expandedCardIds.includes(trans.id);
+            return (
+              <Card key={trans.id} className="transition-all hover:border-stone-300 dark:hover:border-stone-700">
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="p-1 rounded-lg bg-stone-100 dark:bg-stone-800">
+                        {getTransportCategoryIcon(trans.category)}
                       </span>
-                      <span className="text-xs font-mono font-bold text-white bg-slate-800 px-2 py-0.5 rounded">
-                        {trans.operatorNumber}
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300">
+                        {trans.categoryLabel}
                       </span>
+                      {trans.operatorNumber && (
+                        <span className="font-mono text-xs font-bold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-md border border-teal-200 dark:border-teal-800">
+                          {trans.operatorNumber}
+                        </span>
+                      )}
                       {trans.bookingReference && (
-                        <span className="text-xs text-slate-400 font-mono">
-                          訂位代碼：{trans.bookingReference}
+                        <span className="text-xs text-stone-500 font-mono">
+                          代碼: {trans.bookingReference}
                         </span>
                       )}
                     </div>
-                    <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+
+                    <h3 className="text-base sm:text-lg font-bold text-stone-900 dark:text-stone-100">
                       {trans.title}
                     </h3>
-                    <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-300 mt-1">
-                      <span className="font-semibold text-white">{trans.routeFrom}</span>
-                      <span className="text-slate-500">➔</span>
-                      <span className="font-semibold text-white">{trans.routeTo}</span>
-                    </div>
-                  </div>
 
-                  {/* 席位與票種 */}
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
-                    <div className="text-left sm:text-right">
-                      <span className="text-xs font-bold text-emerald-400 block">
-                        {trans.ticketType}
-                      </span>
+                    <div className="flex items-center gap-2 text-xs text-stone-700 dark:text-stone-300 font-medium">
+                      <span>{trans.routeFrom}</span>
+                      <span className="text-stone-400">➔</span>
+                      <span>{trans.routeTo}</span>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-xs text-stone-500 dark:text-stone-400 flex-wrap font-mono pt-1">
+                      {trans.departureTime && (
+                        <span className="flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-teal-600" />
+                          <span>出發: {trans.departureTime}</span>
+                          {trans.arrivalTime && <span>~ {trans.arrivalTime}</span>}
+                        </span>
+                      )}
+
                       {trans.seatsInfo && (
-                        <span className="text-xs text-slate-300 font-mono block mt-0.5">
-                          {trans.seatsInfo}
+                        <span>座位: {trans.seatsInfo}</span>
+                      )}
+
+                      {trans.totalPrice && trans.totalPrice > 0 && (
+                        <span className="font-bold text-stone-900 dark:text-stone-100">
+                          金額: {formatMoney(trans.totalPrice, trans.currency || 'CHF')}
                         </span>
                       )}
                     </div>
+                  </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleOpenTransModal(trans)}
-                        className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-                        title="編輯交通"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => deleteTransport(trans.id)}
-                        className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-colors"
-                        title="刪除交通"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                  {/* 右側操作按鈕 */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenTrans(trans)}
+                      icon={<Edit2 className="w-3.5 h-3.5" />}
+                    >
+                      編輯
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteTrans(trans.id, trans.title)}
+                      icon={<Trash2 className="w-3.5 h-3.5 text-red-500" />}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleExpandCard(trans.id)}
+                      icon={isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    >
+                      {isExpanded ? '收起須知' : '乘車須知'}
+                    </Button>
                   </div>
                 </div>
 
-                {/* 乘車須知卡片 */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                  {/* 月台 */}
-                  <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800/80 space-y-1">
-                    <span className="font-bold text-sky-400 block">🚉 月台與報到候車</span>
-                    <p className="text-slate-300 leading-relaxed">
-                      {trans.platformNotice || '依 SBB App 即時月台號碼登車'}
-                    </p>
-                  </div>
+                {/* 乘車搭乘須知 */}
+                {isExpanded && (
+                  <div className="mt-4 pt-4 border-t border-stone-100 dark:border-stone-800 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {trans.platformNotice && (
+                      <div className="p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/60 dark:border-stone-800 space-y-1">
+                        <span className="font-bold text-stone-800 dark:text-stone-200">月台與候車須知</span>
+                        <p className="text-stone-600 dark:text-stone-400">{trans.platformNotice}</p>
+                      </div>
+                    )}
 
-                  {/* 行李 */}
-                  <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800/80 space-y-1">
-                    <span className="font-bold text-amber-400 block">🧳 大件行李放置須知</span>
-                    <p className="text-slate-300 leading-relaxed">
-                      {trans.luggageNotice || '車廂玄關處置物架或座位上方架'}
-                    </p>
-                  </div>
+                    {trans.luggageNotice && (
+                      <div className="p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/60 dark:border-stone-800 space-y-1">
+                        <span className="font-bold text-stone-800 dark:text-stone-200">行李放置規定</span>
+                        <p className="text-stone-600 dark:text-stone-400">{trans.luggageNotice}</p>
+                      </div>
+                    )}
 
-                  {/* 查票 */}
-                  <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800/80 space-y-1">
-                    <span className="font-bold text-emerald-400 block">🎫 查票出示規定</span>
-                    <p className="text-slate-300 leading-relaxed">
-                      {trans.boardingNotice || '出示護照正本 + 購票憑證'}
-                    </p>
+                    {trans.boardingNotice && (
+                      <div className="p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/60 dark:border-stone-800 space-y-1 sm:col-span-2">
+                        <span className="font-bold text-stone-800 dark:text-stone-200">憑證檢票與登車注意</span>
+                        <p className="text-stone-600 dark:text-stone-400">{trans.boardingNotice}</p>
+                      </div>
+                    )}
+
+                    {trans.notes && (
+                      <div className="p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/60 dark:border-stone-800 space-y-1 sm:col-span-2">
+                        <span className="font-bold text-stone-800 dark:text-stone-200">其他備註</span>
+                        <p className="text-stone-600 dark:text-stone-400">{trans.notes}</p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                )}
+              </Card>
+            );
+          })}
+
+          {transports.length === 0 && (
+            <EmptyState
+              icon={<Plane className="w-6 h-6" />}
+              title="尚未記錄任何交通或車票訂單"
+              description="點擊右上角「新增交通」記錄跨國航班、觀光火車劃位或租車憑證資訊。"
+              action={
+                <Button variant="primary" size="sm" onClick={() => handleOpenTrans()}>
+                  新增第一筆交通車票
+                </Button>
+              }
+            />
+          )}
         </div>
       )}
 
       {/* 住宿 Modal */}
       {showAccModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white">
-                {editingAccId ? '編輯住宿預訂' : '新增住宿預訂'}
-              </h3>
-              <button onClick={() => setShowAccModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+        <Modal
+          isOpen={showAccModal}
+          onClose={() => setShowAccModal(false)}
+          title={editingAcc ? '編輯住宿預訂' : '新增住宿預訂'}
+          maxWidth="xl"
+        >
+          <form onSubmit={handleSaveAcc} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Select
+                label="所屬住宿基地"
+                value={accBaseId}
+                onChange={(e) => setAccBaseId(e.target.value)}
+              >
+                {bases.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.nameZh} ({b.name})
+                  </option>
+                ))}
+              </Select>
+
+              <Input
+                label="預約平台"
+                placeholder="例如: Booking.com, Airbnb, 官網"
+                value={accPlatform}
+                onChange={(e) => setAccPlatform(e.target.value)}
+              />
             </div>
 
-            <form onSubmit={handleSaveAcc} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1">所屬基地城市</label>
-                  <input
-                    type="text"
-                    required
-                    value={accForm.baseNameZh}
-                    onChange={(e) => setAccForm({ ...accForm, baseNameZh: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">預訂平台</label>
-                  <input
-                    type="text"
-                    value={accForm.bookingPlatform}
-                    onChange={(e) => setAccForm({ ...accForm, bookingPlatform: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                  />
-                </div>
-              </div>
+            <Input
+              label="飯店 / 公寓名稱"
+              required
+              placeholder="例如: Luzern Lakeside Family Apartment"
+              value={accHotelName}
+              onChange={(e) => setAccHotelName(e.target.value)}
+            />
 
-              <div>
-                <label className="block text-slate-400 mb-1">飯店 / 木屋名稱</label>
-                <input
-                  type="text"
-                  required
-                  value={accForm.hotelName}
-                  onChange={(e) => setAccForm({ ...accForm, hotelName: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="房型規格"
+                placeholder="例如: 兩臥室公寓 (可住 4-6 人)"
+                value={accRoomType}
+                onChange={(e) => setAccRoomType(e.target.value)}
+              />
+              <Input
+                label="訂單編號 / 預訂代碼"
+                placeholder="例如: BKG-98471203"
+                value={accCode}
+                onChange={(e) => setAccCode(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                type="date"
+                label="入住日期"
+                value={accCheckIn}
+                onChange={(e) => setAccCheckIn(e.target.value)}
+                required
+              />
+              <Input
+                type="date"
+                label="退房日期"
+                value={accCheckOut}
+                onChange={(e) => setAccCheckOut(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Input
+                type="number"
+                label="預訂總金額"
+                value={accPrice || ''}
+                onChange={(e) => setAccPrice(parseFloat(e.target.value) || 0)}
+              />
+              <Select
+                label="計價幣別"
+                value={accCurrency}
+                onChange={(e) => setAccCurrency(e.target.value)}
+              >
+                <option value="CHF">CHF (瑞士法郎)</option>
+                <option value="TWD">TWD (新台幣)</option>
+                <option value="EUR">EUR (歐元)</option>
+                <option value="JPY">JPY (日圓)</option>
+                <option value="USD">USD (美元)</option>
+              </Select>
+              <Select
+                label="付款狀態"
+                value={accPaymentStatus}
+                onChange={(e) => setAccPaymentStatus(e.target.value as any)}
+              >
+                <option value="paid">已線上付清</option>
+                <option value="pay_at_property">現場付費</option>
+                <option value="deposit_paid">已付部分訂金</option>
+              </Select>
+            </div>
+
+            <Input
+              label="飯店地址"
+              placeholder="例如: Alpenstrasse 12, 6004 Luzern"
+              value={accAddress}
+              onChange={(e) => setAccAddress(e.target.value)}
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="聯絡電話"
+                placeholder="+41 41 123 4567"
+                value={accPhone}
+                onChange={(e) => setAccPhone(e.target.value)}
+              />
+              <Input
+                label="Google 地圖連結"
+                placeholder="https://maps.google.com/?q=..."
+                value={accMapsUrl}
+                onChange={(e) => setAccMapsUrl(e.target.value)}
+              />
+            </div>
+
+            {/* 入住重要須知 */}
+            <div className="p-3.5 bg-stone-50 dark:bg-stone-800/50 rounded-2xl border border-stone-200/60 dark:border-stone-800 space-y-3">
+              <span className="text-xs font-bold text-stone-700 dark:text-stone-300 block">
+                入住指南與房屋規定 (選填)
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  label="入住 / 退房時間標註"
+                  value={accCheckInNotice}
+                  onChange={(e) => setAccCheckInNotice(e.target.value)}
+                />
+                <Input
+                  label="鑰匙盒密碼 / 取鑰方式"
+                  value={accKeyNotice}
+                  onChange={(e) => setAccKeyNotice(e.target.value)}
                 />
               </div>
+              <Input
+                label="垃圾分類規定"
+                placeholder="例如: 須使用專用收費垃圾袋，生鮮廚餘分開丟棄"
+                value={accGarbageNotice}
+                onChange={(e) => setAccGarbageNotice(e.target.value)}
+              />
+              <Input
+                label="廚房與退房規定"
+                placeholder="例如: 退房前清空冰箱，碗盤放入洗碗機並啟動"
+                value={accKitchenNotice}
+                onChange={(e) => setAccKitchenNotice(e.target.value)}
+              />
+            </div>
 
-              <div>
-                <label className="block text-slate-400 mb-1">房型與床型配置</label>
-                <input
-                  type="text"
-                  value={accForm.roomType}
-                  onChange={(e) => setAccForm({ ...accForm, roomType: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-slate-400 mb-1">入住日</label>
-                  <input
-                    type="date"
-                    value={accForm.checkInDate}
-                    onChange={(e) => setAccForm({ ...accForm, checkInDate: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">退房日</label>
-                  <input
-                    type="date"
-                    value={accForm.checkOutDate}
-                    onChange={(e) => setAccForm({ ...accForm, checkOutDate: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">總價與幣別</label>
-                  <input
-                    type="number"
-                    value={accForm.totalPrice}
-                    onChange={(e) => setAccForm({ ...accForm, totalPrice: Number(e.target.value) })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-white font-mono"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">訂單確認編號</label>
-                <input
-                  type="text"
-                  value={accForm.confirmationCode}
-                  onChange={(e) => setAccForm({ ...accForm, confirmationCode: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">地址與地圖資訊</label>
-                <input
-                  type="text"
-                  value={accForm.address}
-                  onChange={(e) => setAccForm({ ...accForm, address: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                />
-              </div>
-
-              {/* 關鍵須知欄位 */}
-              <div className="border-t border-slate-800 pt-2 space-y-2">
-                <span className="font-bold text-amber-300 block">重要入住與房屋須知：</span>
-                <div>
-                  <label className="block text-slate-400 mb-1">🔑 鑰匙與入住須知 (Keybox密碼等)</label>
-                  <textarea
-                    rows={2}
-                    value={accForm.keyPickupNotice}
-                    onChange={(e) => setAccForm({ ...accForm, keyPickupNotice: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">♻️ 垃圾分類與丟棄須知</label>
-                  <textarea
-                    rows={2}
-                    value={accForm.garbageRulesNotice}
-                    onChange={(e) => setAccForm({ ...accForm, garbageRulesNotice: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">🍳 廚房自煮與退房清潔須知</label>
-                  <textarea
-                    rows={2}
-                    value={accForm.kitchenRulesNotice}
-                    onChange={(e) => setAccForm({ ...accForm, kitchenRulesNotice: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAccModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold"
-                >
-                  儲存住宿
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-stone-100 dark:border-stone-800">
+              <Button type="button" variant="ghost" onClick={() => setShowAccModal(false)}>
+                取消
+              </Button>
+              <Button type="submit" variant="primary">
+                儲存住宿紀錄
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {/* 交通 Modal */}
       {showTransModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white">
-                {editingTransId ? '編輯交通訂單' : '新增交通安排'}
-              </h3>
-              <button onClick={() => setShowTransModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+        <Modal
+          isOpen={showTransModal}
+          onClose={() => setShowTransModal(false)}
+          title={editingTrans ? '編輯交通訂單' : '新增交通訂單'}
+          maxWidth="xl"
+        >
+          <form onSubmit={handleSaveTrans} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Select
+                label="交通類別"
+                value={transCategory}
+                onChange={(e) => setTransCategory(e.target.value as any)}
+              >
+                <option value="flight">航班 (Flight)</option>
+                <option value="train">火車 (Train)</option>
+                <option value="scenic_train">景觀列車 (Scenic Train)</option>
+                <option value="mountain_rail">高山火車 (Mountain Rail)</option>
+                <option value="cable_car">高空纜車 (Cable Car)</option>
+                <option value="ferry">遊船渡輪 (Ferry)</option>
+                <option value="car_rental">租車自駕 (Car Rental)</option>
+              </Select>
+
+              <Input
+                label="班次 / 車次編號"
+                placeholder="例如: BR087, Glacier Express 902"
+                value={transNumber}
+                onChange={(e) => setTransNumber(e.target.value)}
+              />
             </div>
 
-            <form onSubmit={handleSaveTrans} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1">交通類別</label>
-                  <select
-                    value={transForm.category}
-                    onChange={(e) => setTransForm({ 
-                      ...transForm, 
-                      category: e.target.value as any,
-                      categoryLabel: e.target.options[e.target.selectedIndex].text
-                    })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold"
-                  >
-                    <option value="scenic_train">景觀列車</option>
-                    <option value="flight">國際航班</option>
-                    <option value="mountain_rail">登山齒軌</option>
-                    <option value="cable_car">高空纜車</option>
-                    <option value="ferry">湖泊渡輪</option>
-                    <option value="car_rental">租車自駕</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">班次 / 車次編號</label>
-                  <input
-                    type="text"
-                    required
-                    value={transForm.operatorNumber}
-                    onChange={(e) => setTransForm({ ...transForm, operatorNumber: e.target.value })}
-                    placeholder="例如: PE 902, BR 087"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
-                  />
-                </div>
-              </div>
+            <Input
+              label="交通項目標題"
+              required
+              placeholder="例如: 台北 ➔ 蘇黎世 直飛航班、冰河列車景觀席"
+              value={transTitle}
+              onChange={(e) => setTransTitle(e.target.value)}
+            />
 
-              <div>
-                <label className="block text-slate-400 mb-1">交通安排標題</label>
-                <input
-                  type="text"
-                  required
-                  value={transForm.title}
-                  onChange={(e) => setTransForm({ ...transForm, title: e.target.value })}
-                  placeholder="例如: 冰河列車全景席預訂"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                />
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="出發地點 / 車站"
+                placeholder="例如: 蘇黎世火車站 (Zürich HB)"
+                value={transFrom}
+                onChange={(e) => setTransFrom(e.target.value)}
+              />
+              <Input
+                label="抵達地點 / 車站"
+                placeholder="例如: 盧塞恩 (Luzern)"
+                value={transTo}
+                onChange={(e) => setTransTo(e.target.value)}
+              />
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1">出發地</label>
-                  <input
-                    type="text"
-                    value={transForm.routeFrom}
-                    onChange={(e) => setTransForm({ ...transForm, routeFrom: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">目的地</label>
-                  <input
-                    type="text"
-                    value={transForm.routeTo}
-                    onChange={(e) => setTransForm({ ...transForm, routeTo: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                  />
-                </div>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="出發時間 (日期與時間)"
+                placeholder="例如: 2027-06-15 08:30"
+                value={transDepTime}
+                onChange={(e) => setTransDepTime(e.target.value)}
+              />
+              <Input
+                label="預計抵達時間 (選填)"
+                placeholder="例如: 2027-06-15 09:45"
+                value={transArrTime}
+                onChange={(e) => setTransArrTime(e.target.value)}
+              />
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1">訂位代碼 / PNR</label>
-                  <input
-                    type="text"
-                    value={transForm.bookingReference}
-                    onChange={(e) => setTransForm({ ...transForm, bookingReference: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">車廂與座位號</label>
-                  <input
-                    type="text"
-                    value={transForm.seatsInfo}
-                    onChange={(e) => setTransForm({ ...transForm, seatsInfo: e.target.value })}
-                    placeholder="車廂 4 / 座位 11-17"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                  />
-                </div>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Input
+                label="訂位代碼 / PNR / 電子票號"
+                placeholder="例如: K7X9WZ"
+                value={transRef}
+                onChange={(e) => setTransRef(e.target.value)}
+              />
+              <Input
+                label="車廂與座位資訊"
+                placeholder="例如: 4 車廂 / 座位 11-14"
+                value={transSeats}
+                onChange={(e) => setTransSeats(e.target.value)}
+              />
+              <Input
+                label="票券類型"
+                placeholder="例如: STP 免費 + 劃位"
+                value={transTicketType}
+                onChange={(e) => setTransTicketType(e.target.value)}
+              />
+            </div>
 
-              {/* 乘車須知 */}
-              <div className="border-t border-slate-800 pt-2 space-y-2">
-                <span className="font-bold text-red-300 block">重要搭乘與轉乘須知：</span>
-                <div>
-                  <label className="block text-slate-400 mb-1">🚉 月台候車須知</label>
-                  <input
-                    type="text"
-                    value={transForm.platformNotice}
-                    onChange={(e) => setTransForm({ ...transForm, platformNotice: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">🧳 大件行李放置須知</label>
-                  <input
-                    type="text"
-                    value={transForm.luggageNotice}
-                    onChange={(e) => setTransForm({ ...transForm, luggageNotice: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">🎫 查票出示規定</label>
-                  <input
-                    type="text"
-                    value={transForm.boardingNotice}
-                    onChange={(e) => setTransForm({ ...transForm, boardingNotice: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-                  />
-                </div>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                type="number"
+                label="總票價金額"
+                value={transPrice || ''}
+                onChange={(e) => setTransPrice(parseFloat(e.target.value) || 0)}
+              />
+              <Select
+                label="計價幣別"
+                value={transCurrency}
+                onChange={(e) => setTransCurrency(e.target.value)}
+              >
+                <option value="CHF">CHF (瑞士法郎)</option>
+                <option value="TWD">TWD (新台幣)</option>
+                <option value="EUR">EUR (歐元)</option>
+                <option value="JPY">JPY (日圓)</option>
+                <option value="USD">USD (美元)</option>
+              </Select>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowTransModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold"
-                >
-                  儲存交通
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="p-3.5 bg-stone-50 dark:bg-stone-800/50 rounded-2xl border border-stone-200/60 dark:border-stone-800 space-y-3">
+              <span className="text-xs font-bold text-stone-700 dark:text-stone-300 block">
+                搭乘乘車須知 (選填)
+              </span>
+              <Input
+                label="月台與候車提醒"
+                placeholder="例如: 月台 4 候車，需提早 15 分鐘抵達"
+                value={transPlatformNotice}
+                onChange={(e) => setTransPlatformNotice(e.target.value)}
+              />
+              <Input
+                label="大件行李規定"
+                placeholder="例如: 行李置於車廂玄關專屬大型行李架"
+                value={transLuggageNotice}
+                onChange={(e) => setTransLuggageNotice(e.target.value)}
+              />
+              <Input
+                label="檢票與登車規定"
+                placeholder="例如: 須出示護照正本與通票 QR Code"
+                value={transBoardingNotice}
+                onChange={(e) => setTransBoardingNotice(e.target.value)}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-stone-100 dark:border-stone-800">
+              <Button type="button" variant="ghost" onClick={() => setShowTransModal(false)}>
+                取消
+              </Button>
+              <Button type="submit" variant="primary">
+                儲存交通紀錄
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

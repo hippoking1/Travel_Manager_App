@@ -1,109 +1,110 @@
 import React from 'react';
-import { Search, ChevronDown, ChevronUp } from 'lucide-react';
-import { useTripStore } from '../../stores/tripStore';
-import { useUIStore } from '../../stores/uiStore';
+import { Search, LayoutGrid, ListFilter, X } from 'lucide-react';
+import { useConfig, useBases, useItinerary } from '../../stores/selectors';
+import { useUIStore, type ItineraryViewMode } from '../../stores/uiStore';
 import { PersonaBadge } from '../shared/PersonaBadge';
 import { PERSONA_CONFIG, type PersonaTag } from '../../types';
+import { SegmentedControl } from '../ui/SegmentedControl';
 
 export const FilterBar: React.FC = () => {
-  const { config, itinerary } = useTripStore();
+  const config = useConfig();
+  const bases = useBases();
+  const itinerary = useItinerary();
   const { 
     selectedBaseId, 
     setSelectedBaseId, 
     selectedPersona, 
     setSelectedPersona, 
-    expandedDays, 
-    expandAllDays, 
-    collapseAllDays,
-    searchQuery,
-    setSearchQuery 
+    searchQuery, 
+    setSearchQuery,
+    itineraryView,
+    setItineraryView
   } = useUIStore();
 
-  const allDayNumbers = itinerary.map((d) => d.day);
-  const isAllExpanded = expandedDays.length === allDayNumbers.length;
+  const isAnyFilterActive = selectedBaseId !== 'all' || selectedPersona !== null || !!searchQuery.trim();
+
+  const clearAllFilters = () => {
+    setSelectedBaseId('all');
+    setSelectedPersona(null);
+    setSearchQuery('');
+  };
 
   return (
-    <div className="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl p-4 mb-6 shadow-xl space-y-4">
-      {/* 上排：基地切換 Tab (支援手機橫向自然滾動) */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            依住宿基地快速篩選
+    <div className="bg-white dark:bg-stone-900 border border-stone-200/80 dark:border-stone-800 rounded-3xl p-4 sm:p-5 mb-6 shadow-xs space-y-3.5">
+      {/* 上排：住宿基地切換 + 檢視模式切換 (列表 | 看板) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          <span className="text-xs font-bold text-stone-500 uppercase tracking-wider shrink-0 mr-1 hidden md:inline">
+            基地篩選：
           </span>
           <button
-            onClick={() => isAllExpanded ? collapseAllDays() : expandAllDays(allDayNumbers)}
-            className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1 font-medium transition-colors"
-          >
-            {isAllExpanded ? (
-              <>
-                <ChevronUp className="w-3.5 h-3.5" />
-                <span>全部折疊</span>
-              </>
-            ) : (
-              <>
-                <ChevronDown className="w-3.5 h-3.5" />
-                <span>全部展開 ({itinerary.length}天)</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          <button
+            type="button"
             onClick={() => setSelectedBaseId('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all shrink-0 ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 cursor-pointer ${
               selectedBaseId === 'all'
-                ? 'bg-white text-slate-900 shadow-md shadow-white/10'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                ? 'bg-teal-700 dark:bg-teal-500 text-white dark:text-stone-950 shadow-xs'
+                : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700'
             }`}
           >
-            全部天數 (Day 1 - {itinerary.length || config.totalDays || 1})
+            全部天數 (D1–{itinerary.length || config.totalDays || 1})
           </button>
 
-          {config.bases.map((base) => {
+          {bases.map((base) => {
             const isSelected = selectedBaseId === base.id;
-            // 動態根據目前行程分配計算此基地涵蓋的天數
             const baseDays = itinerary.filter((d) => d.baseId === base.id).map((d) => d.day);
-            const dayRangeText = baseDays.length === 0
-              ? ''
-              : baseDays.length === 1
+            const dayRangeText =
+              baseDays.length === 0
+                ? ''
+                : baseDays.length === 1
                 ? `(D${baseDays[0]})`
-                : `(D${baseDays[0]}-${baseDays[baseDays.length - 1]})`;
+                : `(D${baseDays[0]}–D${baseDays[baseDays.length - 1]})`;
 
             return (
               <button
                 key={base.id}
+                type="button"
                 onClick={() => setSelectedBaseId(base.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 flex items-center gap-1.5 border cursor-pointer ${
+                  isSelected
+                    ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 ring-2'
+                    : 'bg-stone-100/80 dark:bg-stone-800/80 text-stone-600 dark:text-stone-400 border-stone-200 dark:border-stone-800 hover:text-stone-900'
+                }`}
                 style={{
                   borderColor: isSelected ? base.color : undefined,
+                  boxShadow: isSelected ? `0 0 0 1px ${base.color}` : undefined,
                 }}
-                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all shrink-0 flex items-center gap-1.5 border ${
-                  isSelected
-                    ? 'bg-slate-800 text-white shadow-lg ring-1'
-                    : 'bg-slate-800/60 text-slate-300 border-slate-700/60 hover:bg-slate-800 hover:text-white'
-                }`}
               >
                 <span
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  className="w-2 h-2 rounded-full shrink-0"
                   style={{ backgroundColor: base.color }}
                 />
                 <span>{base.nameZh}</span>
                 {dayRangeText && (
-                  <span className="text-[11px] opacity-70">
-                    {dayRangeText}
-                  </span>
+                  <span className="text-[10px] opacity-75 font-mono">{dayRangeText}</span>
                 )}
               </button>
             );
           })}
         </div>
+
+        {/* 檢視切換：列表 | 看板 */}
+        <div className="shrink-0 flex items-center gap-2">
+          <SegmentedControl<ItineraryViewMode>
+            size="sm"
+            value={itineraryView}
+            onChange={(val) => setItineraryView(val)}
+            options={[
+              { value: 'board', label: '看板模式', icon: <LayoutGrid className="w-3.5 h-3.5" /> },
+              { value: 'list', label: '時間軸', icon: <ListFilter className="w-3.5 h-3.5" /> },
+            ]}
+          />
+        </div>
       </div>
 
-      {/* 下排：Persona 標籤快速過濾 + 搜尋欄 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
-        {/* 標籤群 */}
+      {/* 下排：角色標籤過濾 + 關鍵字搜尋 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2.5 border-t border-stone-100 dark:border-stone-800">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-          <span className="text-xs text-slate-400 shrink-0 mr-1 hidden md:inline">
+          <span className="text-xs font-bold text-stone-500 uppercase tracking-wider shrink-0 mr-1 hidden md:inline">
             角色標籤：
           </span>
           {(Object.keys(PERSONA_CONFIG) as PersonaTag[]).map((tag) => (
@@ -115,32 +116,35 @@ export const FilterBar: React.FC = () => {
               onClick={() => setSelectedPersona(tag)}
             />
           ))}
-          {selectedPersona && (
+
+          {isAnyFilterActive && (
             <button
-              onClick={() => setSelectedPersona(null)}
-              className="text-xs text-slate-400 hover:text-white underline ml-1 shrink-0"
+              type="button"
+              onClick={clearAllFilters}
+              className="text-xs text-teal-700 dark:text-teal-400 hover:underline ml-2 shrink-0 font-medium cursor-pointer"
             >
-              清除
+              清除所有篩選
             </button>
           )}
         </div>
 
-        {/* 關鍵字搜尋 */}
+        {/* 關鍵字搜尋輸入框 */}
         <div className="relative w-full sm:w-64">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜尋景點、火車、美食..."
-            className="w-full bg-slate-950/80 border border-slate-700/80 text-xs sm:text-sm rounded-xl pl-9 pr-3 py-1.5 text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+            placeholder="搜尋活動、火車、景點..."
+            className="w-full bg-stone-100/80 dark:bg-stone-800/80 border border-stone-200 dark:border-stone-700 rounded-xl pl-8 pr-7 py-1.5 text-xs sm:text-sm text-stone-900 dark:text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent transition-all"
           />
           {searchQuery && (
             <button
+              type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 text-xs cursor-pointer p-0.5"
             >
-              ✕
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>

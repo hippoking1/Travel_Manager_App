@@ -1,5 +1,5 @@
 // ============================================================
-// Google Sheets API Proxy (透過 Google Apps Script 讀寫)
+// Google Sheets API Proxy (透過 Google Apps Script 讀寫，支援多旅程 tripId 隔離)
 // ============================================================
 
 const SCRIPT_URL_ENV = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GAS_URL || '';
@@ -35,9 +35,15 @@ export function isGasConfigured(): boolean {
 /**
  * 讀取試算表資料
  * @param sheetName 可選，若不傳則一次拉取全部分頁
+ * @param tripId 可選，指定旅程 ID 進行隔離查詢
  */
-export async function fetchFromSheet<T = unknown>(sheetName?: string): Promise<{ success: boolean; data?: T; error?: string }> {
+export async function fetchFromSheet<T = unknown>(
+  sheetName?: string,
+  tripId?: string
+): Promise<{ success: boolean; data?: T; error?: string }> {
   const url = getGasUrl();
+  const secret = getFamilySecret();
+
   if (!isGasConfigured()) {
     return { success: false, error: '尚未設定 Google Apps Script Web App URL' };
   }
@@ -46,7 +52,12 @@ export async function fetchFromSheet<T = unknown>(sheetName?: string): Promise<{
   const timeoutId = setTimeout(() => controller.abort(), 12000); // 12秒超時保護
 
   try {
-    const fullUrl = sheetName ? `${url}?sheet=${encodeURIComponent(sheetName)}` : url;
+    const params = new URLSearchParams();
+    if (sheetName) params.append('sheet', sheetName);
+    if (tripId) params.append('tripId', tripId);
+    if (secret) params.append('secret', secret);
+
+    const fullUrl = `${url}?${params.toString()}`;
     const response = await fetch(fullUrl, {
       method: 'GET',
       redirect: 'follow',
@@ -76,7 +87,8 @@ export async function fetchFromSheet<T = unknown>(sheetName?: string): Promise<{
 export async function mutateSheet(
   sheet: string,
   action: 'APPEND' | 'UPDATE' | 'DELETE' | 'BATCH',
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  tripId?: string
 ): Promise<{ success: boolean; error?: string; id?: string }> {
   const url = getGasUrl();
   const secret = getFamilySecret();
@@ -94,6 +106,7 @@ export async function mutateSheet(
       secret,
       sheet,
       action,
+      tripId,
       ...payload,
     });
 

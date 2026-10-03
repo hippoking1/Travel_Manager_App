@@ -1,26 +1,29 @@
 /**
  * ==========================================================================
- * Swiss Family Odyssey 2027 / Travel Manager App
- * Google Apps Script (GAS) API Proxy (高容錯強健版 v2)
+ * Travel Manager App / Swiss Family Odyssey
+ * Google Apps Script (GAS) API Proxy (高容錯多旅程同步強健版 v3)
  * ==========================================================================
  * 特性：
- * 1. 自動防搶寫併發鎖 (LockService)
- * 2. 分頁不存在時自動建立，欄位不存在時自動建立標題列
- * 3. UPDATE 操作支援 Upsert (找不到 ID 或分頁為空時自動新增，絕不報「分頁無資料」)
- * 4. 同時相容 key-value 結構 (如 TripConfig) 與 id 實體結構 (如 Expenses, Checklist)
+ * 1. 支援多場旅遊計畫 (tripId 隔離)，同一份 Sheet 儲存所有旅程資料
+ * 2. 自動防搶寫併發鎖 (LockService)
+ * 3. 分頁不存在時自動建立，欄位不存在時自動建立標題列
+ * 4. UPDATE 操作支援 Upsert (找不到 ID 或分頁為空時自動新增，絕不報「分頁無資料」)
+ * 5. 支援行程日程分頁 (Itinerary) 與 TimeBlocks JSON 批次同步
+ * 6. doGet / doPost 密鑰安全驗證 (Secret Key)
  */
 
-// 自訂密鑰 (必須與前端一致)
+// 自訂防護密鑰 (必須與前端一致)
 var SCRIPT_SECRET = "SWISS_ODYSSEY_2027_SECRET";
 
-// 各分頁標準預設標題列 (若分頁全新自動寫入)
+// 各分頁標準預設標題列 (全新自動建立)
 var DEFAULT_HEADERS = {
-  TripConfig: ["key", "value", "updatedAt"],
-  Expenses: ["id", "timestamp", "dayNumber", "category", "amount", "currency", "note", "paidBy"],
-  Checklist: ["id", "category", "categoryLabel", "item", "checked", "priority", "assignedTo", "altitudeRange"],
-  Bookmarks: ["id", "locationId", "locationName", "notes", "timestamp"],
-  Accommodations: ["id", "baseId", "baseNameZh", "hotelName", "roomType", "checkInDate", "checkOutDate", "nights", "bookingPlatform", "confirmationCode", "totalPrice", "currency", "paymentStatus", "paymentStatusLabel", "address", "checkInTimeNotice", "keyPickupNotice", "garbageRulesNotice", "kitchenRulesNotice", "notes"],
-  Transports: ["id", "category", "categoryLabel", "title", "routeFrom", "routeTo", "departureTime", "operatorNumber", "bookingReference", "seatsInfo", "ticketType", "platformNotice", "luggageNotice", "boardingNotice", "notes"]
+  TripConfig: ["tripId", "key", "value", "updatedAt"],
+  Expenses: ["tripId", "id", "timestamp", "dayNumber", "category", "amount", "currency", "note", "paidBy"],
+  Checklist: ["tripId", "id", "category", "categoryLabel", "item", "checked", "priority", "assignedTo", "altitudeRange"],
+  Bookmarks: ["tripId", "id", "locationId", "locationName", "notes", "timestamp"],
+  Accommodations: ["tripId", "id", "baseId", "baseNameZh", "hotelName", "roomType", "checkInDate", "checkOutDate", "nights", "bookingPlatform", "confirmationCode", "totalPrice", "currency", "paymentStatus", "paymentStatusLabel", "address", "checkInTimeNotice", "keyPickupNotice", "garbageRulesNotice", "kitchenRulesNotice", "notes"],
+  Transports: ["tripId", "id", "category", "categoryLabel", "title", "routeFrom", "routeTo", "departureTime", "operatorNumber", "bookingReference", "seatsInfo", "ticketType", "platformNotice", "luggageNotice", "boardingNotice", "notes"],
+  Itinerary: ["tripId", "dayId", "day", "baseId", "title", "subtitle", "highlights", "timeBlocksJson", "foodNotesJson", "updatedAt"]
 };
 
 /**
@@ -46,7 +49,7 @@ function ensureHeaders(sheet, sheetName, sampleObj) {
     var defHeaders = DEFAULT_HEADERS[sheetName];
     if (!defHeaders || defHeaders.length === 0) {
       defHeaders = Object.keys(sampleObj || {});
-      if (defHeaders.length === 0) defHeaders = ["id", "timestamp"];
+      if (defHeaders.length === 0) defHeaders = ["tripId", "id", "timestamp"];
     }
     sheet.getRange(1, 1, 1, defHeaders.length).setValues([defHeaders]);
     return defHeaders;
@@ -55,19 +58,34 @@ function ensureHeaders(sheet, sheetName, sampleObj) {
 }
 
 /**
- * HTTP GET：讀取試算表資料
+ * HTTP GET：讀取試算表資料 (支援 tripId 隔離篩選與 Secret 防護)
  */
 function doGet(e) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheetParam = e && e.parameter ? e.parameter.sheet : null;
+    var tripIdParam = e && e.parameter ? e.parameter.tripId : null;
+    var secretParam = e && e.parameter ? e.parameter.secret : null;
+
+    // 若設定了 secret 且前端有傳入，驗證防護
+    if (secretParam && secretParam !== SCRIPT_SECRET) {
+      return jsonResponse({ success: false, error: "密鑰驗證失敗 (Unauthorized)" }, 401);
+    }
+
+    function filterRows(rows) {
+      if (!tripIdParam) return rows;
+      return rows.filter(function (r) {
+        // 若資料列無 tripId 則代表舊版共用資料，依然予以保留相容
+        return !r.tripId || String(r.tripId) === String(tripIdParam);
+      });
+    }
 
     if (sheetParam) {
       var ws = ss.getSheetByName(sheetParam);
       if (!ws) {
         return jsonResponse({ success: true, data: [] });
       }
-      return jsonResponse({ success: true, data: sheetToObjects(ws) });
+      return jsonResponse({ success: true, data: filterRows(sheetToObjects(ws)) });
     }
 
     // 一次拉取全部分頁
@@ -75,7 +93,7 @@ function doGet(e) {
     var sheets = ss.getSheets();
     for (var i = 0; i < sheets.length; i++) {
       var s = sheets[i];
-      result[s.getName()] = sheetToObjects(s);
+      result[s.getName()] = filterRows(sheetToObjects(s));
     }
 
     return jsonResponse({ success: true, data: result });
@@ -85,7 +103,7 @@ function doGet(e) {
 }
 
 /**
- * HTTP POST：寫入 / 更新 / 刪除試算表資料
+ * HTTP POST：寫入 / 更新 / 刪除試算表資料 (支援 tripId 與 Upsert)
  */
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -100,7 +118,7 @@ function doPost(e) {
 
     var payload = JSON.parse(e.postData.contents);
 
-    // 檢查密鑰 (若有傳送 secret 則檢查)
+    // 檢查密鑰
     if (payload.secret && payload.secret !== SCRIPT_SECRET) {
       return jsonResponse({ success: false, error: "密鑰驗證失敗 (Unauthorized)" }, 401);
     }
@@ -109,14 +127,16 @@ function doPost(e) {
     var sheetName = payload.sheet || "General";
     var sheet = getOrCreateSheet(ss, sheetName);
     var action = payload.action;
+    var tripId = payload.tripId || "";
 
     // 1. 新增 (APPEND)
     if (action === "APPEND") {
       var rowObj = payload.row || {};
-      var headers = ensureHeaders(sheet, sheetName, rowObj);
-      
+      if (tripId && !rowObj.tripId) rowObj.tripId = tripId;
       if (!rowObj.id && !rowObj.key) rowObj.id = Utilities.getUuid();
       if (!rowObj.timestamp) rowObj.timestamp = new Date().toISOString();
+
+      var headers = ensureHeaders(sheet, sheetName, rowObj);
 
       var newRow = headers.map(function (h) {
         return rowObj[h] !== undefined ? rowObj[h] : "";
@@ -126,35 +146,41 @@ function doPost(e) {
       return jsonResponse({ success: true, action: "APPEND", id: rowObj.id || rowObj.key, row: rowObj });
     }
 
-    // 2. 更新或自動新增 (UPDATE / UPSERT) —— 徹底解決「分頁無資料」
+    // 2. 更新或自動新增 (UPDATE / UPSERT)
     if (action === "UPDATE") {
       var targetId = payload.id !== undefined ? payload.id : payload.key;
       var updates = payload.updates || {};
+      if (tripId && !updates.tripId) updates.tripId = tripId;
       updates.updatedAt = new Date().toISOString();
 
       var headersList = ensureHeaders(sheet, sheetName, updates);
-      
-      // 比對欄位名稱：支援 id 或 key
+
+      // 尋找 ID 欄位
       var idColIdx = headersList.indexOf("id");
+      if (idColIdx === -1) idColIdx = headersList.indexOf("key");
+      if (idColIdx === -1) idColIdx = headersList.indexOf("dayId");
       if (idColIdx === -1) {
-        idColIdx = headersList.indexOf("key");
-      }
-      if (idColIdx === -1) {
-        // 若完全無 id 或 key 欄位，自動將其當作首欄加入
         headersList.unshift("id");
         sheet.getRange(1, 1, 1, headersList.length).setValues([headersList]);
         idColIdx = 0;
       }
 
+      var tripIdColIdx = headersList.indexOf("tripId");
+
       var lastRow = sheet.getLastRow();
       var foundRowIndex = -1;
 
       if (lastRow >= 2) {
-        var dataValues = sheet.getRange(2, idColIdx + 1, lastRow - 1, 1).getValues();
-        for (var r = 0; r < dataValues.length; r++) {
-          if (String(dataValues[r][0]) === String(targetId)) {
-            foundRowIndex = r + 2; // 1-indexed, 跳過首行標題
-            break;
+        var idValues = sheet.getRange(2, idColIdx + 1, lastRow - 1, 1).getValues();
+        var tripValues = tripIdColIdx !== -1 ? sheet.getRange(2, tripIdColIdx + 1, lastRow - 1, 1).getValues() : null;
+
+        for (var r = 0; r < idValues.length; r++) {
+          if (String(idValues[r][0]) === String(targetId)) {
+            // 若有 tripId 則必須匹配相同 tripId
+            if (!tripId || !tripValues || String(tripValues[r][0]) === String(tripId) || !tripValues[r][0]) {
+              foundRowIndex = r + 2;
+              break;
+            }
           }
         }
       }
@@ -170,10 +196,13 @@ function doPost(e) {
         return jsonResponse({ success: true, action: "UPDATE", id: targetId, row: updates });
       }
 
-      // B. 若找不到該 ID 或分頁剛建立為空：自動執行 UPSERT 新增為新列！
+      // B. 找不到 ID：自動 UPSERT 新增
       var upsertRow = headersList.map(function (colName) {
-        if (colName === "id" || colName === "key") {
+        if (colName === "id" || colName === "key" || colName === "dayId") {
           return targetId;
+        }
+        if (colName === "tripId") {
+          return tripId;
         }
         return updates[colName] !== undefined ? updates[colName] : "";
       });
@@ -193,6 +222,7 @@ function doPost(e) {
       var headersDel = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
       var idIdxDel = headersDel.indexOf("id");
       if (idIdxDel === -1) idIdxDel = headersDel.indexOf("key");
+      if (idIdxDel === -1) idIdxDel = headersDel.indexOf("dayId");
       if (idIdxDel === -1) return jsonResponse({ success: false, error: "無 ID/KEY 欄位" }, 400);
 
       var rowsDel = sheet.getRange(2, idIdxDel + 1, lastR - 1, 1).getValues();
