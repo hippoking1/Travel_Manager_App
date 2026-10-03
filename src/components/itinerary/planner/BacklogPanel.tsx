@@ -60,6 +60,7 @@ export const BacklogPanel: React.FC<{ disabled?: boolean }> = ({ disabled = fals
   return (
     <>
       <div
+        data-day-id="backlog"
         className={`w-72 sm:w-80 shrink-0 flex flex-col max-h-[calc(100vh-13rem)] bg-stone-100/90 dark:bg-stone-900/60 border rounded-3xl overflow-hidden transition-all duration-150 ${
           isOver
             ? 'border-teal-500 ring-2 ring-teal-500/20 bg-teal-50/20 dark:bg-teal-950/20'

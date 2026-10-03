@@ -110,6 +110,7 @@ export const DayColumn: React.FC<DayColumnProps> = ({
     <>
       <div
         ref={setColumnRef}
+        data-day-id={containerId}
         style={columnStyle}
         className={`w-72 sm:w-80 shrink-0 flex flex-col max-h-[calc(100vh-13rem)] bg-stone-100/90 dark:bg-stone-900/60 border rounded-3xl overflow-hidden transition-all duration-150 ${
           isColumnDragging
