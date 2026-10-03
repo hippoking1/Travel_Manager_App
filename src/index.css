@@ -90,6 +90,11 @@
   background-color: var(--bg) !important;
 }
 
+/* 深色地圖濾鏡 (完全免 API Key，自然轉換暗色主題圖磚且不影響上方 Markers) */
+.dark-tiles .leaflet-tile-pane {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+
 .leaflet-popup-content-wrapper {
   background: var(--surface) !important;
   color: var(--ink) !important;

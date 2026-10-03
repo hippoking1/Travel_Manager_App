@@ -36,6 +36,35 @@ const MapBoundsController: React.FC<{
   return null;
 };
 
+type MapLayerType = 'osm' | 'topo' | 'satellite';
+
+const TILE_LAYERS: Record<
+  MapLayerType,
+  { name: string; icon: string; url: string; attribution: string; maxZoom: number }
+> = {
+  osm: {
+    name: '標準地圖',
+    icon: '🗺️',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  },
+  topo: {
+    name: '地形等高線',
+    icon: '⛰️',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri &mdash; Esri, USGS, NOAA',
+    maxZoom: 19,
+  },
+  satellite: {
+    name: '衛星影像',
+    icon: '🛰️',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
+    maxZoom: 18,
+  },
+};
+
 export const MapPage: React.FC = () => {
   const navigate = useNavigate();
   const { locations, itinerary, config } = useTripStore();
@@ -44,17 +73,14 @@ export const MapPage: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedDay, setSelectedDay] = useState<number | 'all'>('all');
   const [activeLocation, setActiveLocation] = useState<MapLocation | null>(null);
+  const [mapLayer, setMapLayer] = useState<MapLayerType>('osm');
 
-  // 判斷深色模式以切換 CARTO 底圖
+  // 判斷深色模式 (僅在標準地圖套用暗色濾鏡，不影響衛星圖與地形圖)
   const isDark =
     theme === 'dark' ||
     (theme === 'system' &&
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-color-scheme: dark)').matches);
-
-  const tileUrl = isDark
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
   // 聚合所有地點：locations + bases 中的坐標
   const allLocations: MapLocation[] = useMemo(() => {
@@ -281,16 +307,42 @@ export const MapPage: React.FC = () => {
 
         {/* 右側：全功能 Leaflet 地圖容器 */}
         <div className="lg:col-span-2 h-[420px] sm:h-[500px] lg:h-[640px] rounded-2xl overflow-hidden border border-[var(--color-border)] shadow-md relative order-1 lg:order-2 z-10">
+          {/* 圖層風格切換控制膠囊 (免 API Key，自由切換標準 / 地形 / 衛星) */}
+          <div className="absolute top-3 right-3 z-[1000] flex items-center bg-white/90 dark:bg-stone-900/90 backdrop-blur-md border border-stone-200 dark:border-stone-800 rounded-xl p-1 shadow-md gap-1">
+            {(Object.keys(TILE_LAYERS) as MapLayerType[]).map((key) => {
+              const layer = TILE_LAYERS[key];
+              const active = mapLayer === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setMapLayer(key)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                    active
+                      ? 'bg-[var(--color-primary)] text-white shadow-xs font-bold'
+                      : 'text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'
+                  }`}
+                  title={layer.name}
+                >
+                  <span>{layer.icon}</span>
+                  <span className="hidden sm:inline">{layer.name}</span>
+                </button>
+              );
+            })}
+          </div>
+
           <MapContainer
             center={defaultCenter}
             zoom={8}
             scrollWheelZoom={false}
-            className="w-full h-full"
+            className={`w-full h-full ${isDark && mapLayer === 'osm' ? 'dark-tiles' : ''}`}
           >
-            {/* CARTO 深淺色自適應圖磚 */}
+            {/* 免 API Key 之高解析地圖圖磚 */}
             <TileLayer
-              attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-              url={tileUrl}
+              key={mapLayer}
+              attribution={TILE_LAYERS[mapLayer].attribution}
+              url={TILE_LAYERS[mapLayer].url}
+              maxZoom={TILE_LAYERS[mapLayer].maxZoom}
             />
 
             {/* 視角與 fitBounds 控制器 */}
