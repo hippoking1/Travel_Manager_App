@@ -1,15 +1,19 @@
 import React, { useMemo } from 'react';
-import { Users, Plus, RotateCcw, Calendar, Info } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Users, Plus, RotateCcw, Calendar, Info, Sparkles, Share2 } from 'lucide-react';
 import { useTripStore } from '../../stores/tripStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useActiveTrip, useItinerary, useConfig } from '../../stores/selectors';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { Button } from '../ui/Button';
+import { toast } from '../ui/Toast';
+import { exportTripToJsonString } from '../../lib/tripImport';
 import { FilterBar } from './FilterBar';
 import { PlannerBoard } from './planner/PlannerBoard';
 import { DayTimeline } from './planner/DayTimeline';
 
 export const ItineraryPage: React.FC = () => {
+  const navigate = useNavigate();
   const activeTrip = useActiveTrip();
   const itinerary = useItinerary();
   const config = useConfig();
@@ -76,6 +80,16 @@ export const ItineraryPage: React.FC = () => {
     }
   };
 
+  const handleExportToAi = async () => {
+    try {
+      const jsonStr = exportTripToJsonString(activeTrip);
+      await navigator.clipboard.writeText(jsonStr);
+      toast.success('已將目前旅程 JSON 複製到剪貼簿，可直接貼給 AI 請它微調！');
+    } catch {
+      toast.error('無法複製到剪貼簿，請至「AI 行程匯入」頁面查看完整提示詞與資料。');
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7">
       {/* 頂部旅行概覽 Banner */}
@@ -97,7 +111,7 @@ export const ItineraryPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 統計膠囊 */}
+          {/* 統計膠囊與快捷操作 */}
           <div className="flex items-center gap-2 flex-wrap">
             <div className="bg-stone-100 dark:bg-stone-800/80 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-stone-700 dark:text-stone-300">
               <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
@@ -110,12 +124,31 @@ export const ItineraryPage: React.FC = () => {
             </div>
 
             <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleExportToAi}
+              icon={<Share2 className="w-3.5 h-3.5 text-stone-500" />}
+              title="複製目前旅程 JSON 給 AI 微調"
+            >
+              匯出給 AI
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => navigate('/import')}
+              icon={<Sparkles className="w-3.5 h-3.5 text-teal-600" />}
+            >
+              AI 智慧匯入
+            </Button>
+
+            <Button
               variant="primary"
               size="sm"
               onClick={() => addDay()}
               icon={<Plus className="w-3.5 h-3.5" />}
             >
-              新增一天 (Day {itinerary.length + 1})
+              新增一天
             </Button>
           </div>
         </div>

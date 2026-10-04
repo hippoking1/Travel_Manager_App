@@ -31,6 +31,7 @@ export const Sidebar: React.FC = () => {
 
   const navItems = [
     { to: '/', label: '每日行程', icon: CalendarDays },
+    { to: '/import', label: 'AI 行程匯入', icon: Sparkles },
     { to: '/bookings', label: '住宿與交通', icon: Building2 },
     { to: '/checklist', label: '行前清單', icon: CheckSquare },
     { to: '/map', label: '地理地圖', icon: MapPin },

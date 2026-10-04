@@ -41,6 +41,10 @@ toast.success = (message: string, options?: Omit<ToastItem, 'id' | 'message' | '
   return useToastStore.getState().add({ message, type: 'success', ...options });
 };
 
+toast.info = (message: string, options?: Omit<ToastItem, 'id' | 'message' | 'type'>) => {
+  return useToastStore.getState().add({ message, type: 'info', ...options });
+};
+
 toast.error = (message: string, options?: Omit<ToastItem, 'id' | 'message' | 'type'>) => {
   return useToastStore.getState().add({ message, type: 'error', ...options });
 };

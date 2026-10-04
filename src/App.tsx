@@ -9,6 +9,7 @@ import { WeatherPage } from './components/weather/WeatherPage';
 import { ChecklistPage } from './components/checklist/ChecklistPage';
 import { MatterhornPage } from './components/special/MatterhornPage';
 import { SettingsPage } from './components/settings/SettingsPage';
+import { ImportPage } from './components/import/ImportPage';
 import { useTripStore } from './stores/tripStore';
 
 export const App: React.FC = () => {
@@ -24,6 +25,7 @@ export const App: React.FC = () => {
       <AppShell>
         <Routes>
           <Route path="/" element={<ItineraryPage />} />
+          <Route path="/import" element={<ImportPage />} />
           <Route path="/bookings" element={<BookingsPage />} />
           <Route path="/checklist" element={<ChecklistPage />} />
           <Route path="/map" element={<MapPage />} />

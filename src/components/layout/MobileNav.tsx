@@ -12,7 +12,8 @@ import {
   Settings, 
   Printer, 
   X,
-  Compass
+  Compass,
+  Sparkles
 } from 'lucide-react';
 import { useActiveTrip } from '../../stores/selectors';
 import { hasModule } from '../../config/modules';
@@ -88,6 +89,28 @@ export const MobileNav: React.FC = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* AI 智慧匯入醒目捷徑 */}
+            <NavLink
+              to="/import"
+              onClick={() => setShowMore(false)}
+              className="p-3.5 rounded-2xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 flex items-center justify-between font-bold text-teal-900 dark:text-teal-200 shadow-2xs"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-black">AI 智慧行程匯入</div>
+                  <div className="text-[10px] text-teal-700/80 dark:text-teal-400 font-normal">
+                    複製 Prompt、貼上對話即刻排程
+                  </div>
+                </div>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-200/60 dark:bg-teal-900 text-teal-800 dark:text-teal-300 font-bold">
+                PRO
+              </span>
+            </NavLink>
 
             <div className="grid grid-cols-2 gap-2 text-xs">
               <NavLink

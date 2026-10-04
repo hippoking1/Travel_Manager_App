@@ -30,6 +30,8 @@ import {
   formatTimeSpan
 } from '../lib/itinerary';
 import { normalizeTripPlan, normalizeDayItinerary, normalizeTimeBlock, migrateToV4 } from './migrations';
+import type { TripImportV1, MergeResult } from '../lib/tripImport';
+import { importToNewTripPlan, mergeImportToExistingPlan } from '../lib/tripImport';
 
 export interface TripStoreState {
   // 多場旅遊計畫管理 (Multi-Trip Management)
@@ -39,6 +41,12 @@ export interface TripStoreState {
   createTrip: (params: CreateTripParams) => string;
   deleteTrip: (tripId: string) => void;
   duplicateTrip: (tripId: string) => void;
+  importAsNewTrip: (importData: TripImportV1) => string;
+  applyImportToActive: (
+    importData: TripImportV1,
+    mode: 'replace' | 'append',
+    opts?: { replaceChecklist?: boolean }
+  ) => MergeResult;
 
   // 當前活躍旅程狀態 (便利取得，維持相容)
   config: TripConfig;
@@ -464,6 +472,71 @@ export const useTripStore = create<TripStoreState>()(
             trips: [...state.trips, copyTrip],
           };
         });
+      },
+
+      importAsNewTrip: (importData) => {
+        const { plan } = importToNewTripPlan(importData);
+        const normalized = normalizeTripPlan(plan);
+        set((state) => ({
+          trips: [...state.trips, normalized],
+          activeTripId: normalized.id,
+          config: normalized.config,
+          itinerary: normalized.itinerary,
+          backlog: normalized.backlog,
+          modules: normalized.modules,
+          locations: normalized.locations,
+          expenses: normalized.expenses,
+          checklist: normalized.checklist,
+          accommodations: normalized.accommodations,
+          transports: normalized.transports,
+          bookmarks: normalized.bookmarks,
+        }));
+        return normalized.id;
+      },
+
+      applyImportToActive: (importData, mode, opts) => {
+        const state = get();
+        const currentPlan = state.trips.find((t) => t.id === state.activeTripId) || {
+          id: state.activeTripId,
+          name: state.config.tripName,
+          destination: '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          config: state.config,
+          itinerary: state.itinerary,
+          backlog: state.backlog,
+          modules: state.modules,
+          locations: state.locations,
+          expenses: state.expenses,
+          checklist: state.checklist,
+          accommodations: state.accommodations,
+          transports: state.transports,
+          bookmarks: state.bookmarks,
+        };
+
+        const result = mergeImportToExistingPlan(currentPlan, importData, mode, opts);
+        const normalized = normalizeTripPlan(result.updatedPlan);
+
+        set((currentState) => {
+          const nextTrips = currentState.trips.map((t) =>
+            t.id === normalized.id ? normalized : t
+          );
+          return {
+            trips: nextTrips,
+            config: normalized.config,
+            itinerary: normalized.itinerary,
+            backlog: normalized.backlog,
+            modules: normalized.modules,
+            locations: normalized.locations,
+            expenses: normalized.expenses,
+            checklist: normalized.checklist,
+            accommodations: normalized.accommodations,
+            transports: normalized.transports,
+            bookmarks: normalized.bookmarks,
+          };
+        });
+
+        return result;
       },
 
       // 基本設定 Actions
