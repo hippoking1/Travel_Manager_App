@@ -13,6 +13,7 @@ import type { TripImportV1 } from './schema';
 import { autoScheduleDayBlocks } from './schedule';
 import { DEFAULT_CHECKLIST } from '../../data/clothing-checklist';
 import { DEFAULT_CURRENCY_CONFIG } from '../../utils/currency';
+import { extractAllTripLocations } from '../geo';
 
 export interface ConvertResult {
   plan: TripPlan;
@@ -261,6 +262,8 @@ export function importToNewTripPlan(importData: TripImportV1): ConvertResult {
     bookmarks: [],
   };
 
+  newPlan.locations = extractAllTripLocations(newPlan);
+
   return {
     plan: newPlan,
     warnings,
@@ -502,6 +505,8 @@ export function mergeImportToExistingPlan(
     accommodations: nextAccommodations,
     transports: nextTransports,
   };
+
+  updatedPlan.locations = extractAllTripLocations(updatedPlan);
 
   return {
     updatedPlan,

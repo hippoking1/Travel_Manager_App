@@ -12,7 +12,8 @@ import type {
   TripPlan,
   CreateTripParams,
   DestinationModule,
-  ContainerId
+  ContainerId,
+  BaseInfo
 } from '../types';
 import { DEMO_ITINERARY } from '../data/demo-itinerary';
 import { DEMO_LOCATIONS } from '../data/demo-locations';
@@ -32,6 +33,7 @@ import {
 import { normalizeTripPlan, normalizeDayItinerary, normalizeTimeBlock, migrateToV4 } from './migrations';
 import type { TripImportV1, MergeResult } from '../lib/tripImport';
 import { importToNewTripPlan, mergeImportToExistingPlan } from '../lib/tripImport';
+import { inferCoordinates } from '../lib/geo';
 
 export interface TripStoreState {
   // 多場旅遊計畫管理 (Multi-Trip Management)
@@ -83,6 +85,11 @@ export interface TripStoreState {
   deleteBacklogItem: (blockId: string) => void;
   resetItineraryToDemo: () => void;
   undo: () => void;
+
+  // 住宿地區 / 基地管理 Actions
+  addBase: (nameZh: string, nameEn?: string) => string;
+  deleteBase: (baseId: string) => void;
+  updateBase: (baseId: string, updates: Partial<BaseInfo>) => void;
 
   // 住宿預訂管理 Actions
   addAccommodation: (acc: Omit<AccommodationBooking, 'id'>) => void;
@@ -885,6 +892,68 @@ export const useTripStore = create<TripStoreState>()(
         const snapshotToRestore = lastUndoSnapshot;
         lastUndoSnapshot = null;
         set((state) => mutateActive(state, () => snapshotToRestore));
+      },
+
+      // 住宿地區 / 基地管理 Actions
+      addBase: (nameZh, nameEn) => {
+        const id = `base_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const trimmedZh = nameZh.trim();
+        const trimmedEn = (nameEn || trimmedZh).trim();
+        const coords = inferCoordinates(trimmedZh, trimmedEn);
+
+        const colors = ['#0EA5E9', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#6366F1'];
+        const newBase: BaseInfo = {
+          id,
+          name: trimmedEn,
+          nameZh: trimmedZh,
+          days: [],
+          color: colors[Math.floor(Math.random() * colors.length)],
+          hotelName: `${trimmedZh} 住宿飯店`,
+          coordinates: coords,
+        };
+
+        set((state) =>
+          mutateActive(state, (active) => {
+            const nextBases = [...(active.config.bases || []), newBase];
+            return {
+              config: {
+                ...active.config,
+                bases: nextBases,
+              },
+            };
+          })
+        );
+        return id;
+      },
+
+      deleteBase: (baseId) => {
+        set((state) =>
+          mutateActive(state, (active) => {
+            const nextBases = (active.config.bases || []).filter((b) => b.id !== baseId);
+            return {
+              config: {
+                ...active.config,
+                bases: nextBases,
+              },
+            };
+          })
+        );
+      },
+
+      updateBase: (baseId, updates) => {
+        set((state) =>
+          mutateActive(state, (active) => {
+            const nextBases = (active.config.bases || []).map((b) =>
+              b.id === baseId ? { ...b, ...updates } : b
+            );
+            return {
+              config: {
+                ...active.config,
+                bases: nextBases,
+              },
+            };
+          })
+        );
       },
 
       // 住宿預訂 Actions

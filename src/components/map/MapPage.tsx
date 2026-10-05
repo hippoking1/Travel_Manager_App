@@ -9,12 +9,13 @@ import {
   Route,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useTripStore } from '../../stores/tripStore';
+import { useActiveTrip } from '../../stores/selectors';
 import { useUIStore } from '../../stores/uiStore';
 import { createCustomMarkerIcon, CATEGORY_COLORS } from './CategoryPin';
 import { PageHeader } from '../ui/PageHeader';
 import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
+import { extractAllTripLocations, inferCoordinates } from '../../lib/geo';
 import type { MapLocation, LocationCategory } from '../../types';
 
 // 子元件：依座標列表自動調校視野 fitBounds
@@ -67,7 +68,8 @@ const TILE_LAYERS: Record<
 
 export const MapPage: React.FC = () => {
   const navigate = useNavigate();
-  const { locations, itinerary, config } = useTripStore();
+  const activeTrip = useActiveTrip();
+  const { itinerary, config } = activeTrip;
   const { toggleDayExpanded, setSelectedBaseId, theme } = useUIStore();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -82,27 +84,10 @@ export const MapPage: React.FC = () => {
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-color-scheme: dark)').matches);
 
-  // 聚合所有地點：locations + bases 中的坐標
+  // 聚合所有地點：從行程 activities, 住宿預訂, 住宿地區 與 自訂 locations 全面萃取
   const allLocations: MapLocation[] = useMemo(() => {
-    const list: MapLocation[] = [...locations];
-
-    // 若基地有座標且尚未出現在清單中，動態補充為 base marker
-    (config.bases || []).forEach((b) => {
-      if (b.coordinates && !list.some((l) => l.coordinates[0] === b.coordinates![0] && l.coordinates[1] === b.coordinates![1])) {
-        list.push({
-          id: `base_${b.id}`,
-          name: b.name,
-          nameZh: b.nameZh,
-          coordinates: b.coordinates,
-          category: 'base',
-          description: b.hotelName ? `住宿：${b.hotelName}` : b.notes || '住宿基地中心',
-          dayNumbers: b.days || [],
-        });
-      }
-    });
-
-    return list;
-  }, [locations, config.bases]);
+    return extractAllTripLocations(activeTrip);
+  }, [activeTrip]);
 
   // 篩選後的地點
   const filteredLocations = useMemo(() => {
@@ -127,7 +112,7 @@ export const MapPage: React.FC = () => {
       if (tb.coordinates) {
         coordsList.push(tb.coordinates);
       } else {
-        // 從 locations 查找對應 locationName
+        // 從 allLocations 查找對應 locationName 或 title
         const found = allLocations.find(
           (l) => l.name === tb.locationName || l.nameZh === tb.locationName || l.nameZh === tb.title
         );
@@ -144,8 +129,15 @@ export const MapPage: React.FC = () => {
     return filteredLocations.map((l) => l.coordinates);
   }, [routePolylineCoords, filteredLocations]);
 
-  const defaultCenter: [number, number] =
-    allPoints[0] || (config.bases?.[0]?.coordinates ? config.bases[0].coordinates : [46.8182, 8.2275]);
+  // 智慧初始中心點：若已有景點則以首個景點為準，若無則依旅程名稱/目的地推算，最後才以瑞士為備援
+  const defaultCenter: [number, number] = useMemo(() => {
+    if (allPoints.length > 0) return allPoints[0];
+    const baseWithCoords = config.bases?.find((b) => b.coordinates);
+    if (baseWithCoords?.coordinates) return baseWithCoords.coordinates;
+    const destCoords = inferCoordinates(config.tripName, activeTrip.destination);
+    if (destCoords) return destCoords;
+    return [46.8182, 8.2275];
+  }, [allPoints, config.bases, config.tripName, activeTrip.destination]);
 
   const handleGoToDay = (dayNum: number) => {
     toggleDayExpanded(dayNum);

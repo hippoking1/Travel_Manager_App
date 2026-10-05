@@ -1,6 +1,7 @@
 import type { TimeBlock } from '../../types';
 import type { TripImportTimeBlock } from './schema';
 import { toMin, toHHmm, derivePeriod, findConflicts } from '../itinerary';
+import { inferCoordinates } from '../geo';
 
 export interface ScheduleOptions {
   morningStart?: string;   // 預設 '09:00'
@@ -132,6 +133,8 @@ export function autoScheduleDayBlocks(
     startTime = toHHmm(startMin);
     endTime = toHHmm(calculatedEndMin);
 
+    const coords = raw.coordinates || inferCoordinates(raw.locationName, raw.title, undefined, true);
+
     scheduled.push({
       id: blockId,
       period,
@@ -140,7 +143,7 @@ export function autoScheduleDayBlocks(
       title: raw.title,
       description: raw.description || '',
       locationName: raw.locationName,
-      coordinates: raw.coordinates,
+      coordinates: coords,
       altitude: raw.altitude,
       tags: raw.tags || [],
       tips: raw.tips,

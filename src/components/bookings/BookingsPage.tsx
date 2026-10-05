@@ -40,7 +40,9 @@ export const BookingsPage: React.FC = () => {
     deleteAccommodation,
     addTransport,
     updateTransport,
-    deleteTransport 
+    deleteTransport,
+    addBase,
+    deleteBase
   } = useTripStore();
   const confirm = useConfirm();
 
@@ -51,6 +53,8 @@ export const BookingsPage: React.FC = () => {
   const [showAccModal, setShowAccModal] = useState(false);
   const [editingAcc, setEditingAcc] = useState<AccommodationBooking | null>(null);
   const [accBaseId, setAccBaseId] = useState('');
+  const [isAddingNewBase, setIsAddingNewBase] = useState(false);
+  const [newBaseName, setNewBaseName] = useState('');
   const [accHotelName, setAccHotelName] = useState('');
   const [accRoomType, setAccRoomType] = useState('');
   const [accCheckIn, setAccCheckIn] = useState('');
@@ -141,7 +145,48 @@ export const BookingsPage: React.FC = () => {
       setAccKitchenNotice('');
       setAccNotes('');
     }
+    setIsAddingNewBase(false);
+    setNewBaseName('');
     setShowAccModal(true);
+  };
+
+  // 住宿地區自由新增
+  const handleCreateNewBase = () => {
+    if (!newBaseName.trim()) return;
+    const newId = addBase(newBaseName.trim());
+    setAccBaseId(newId);
+    setNewBaseName('');
+    setIsAddingNewBase(false);
+  };
+
+  // 住宿地區自由刪除
+  const handleDeleteCurrentBase = async () => {
+    if (bases.length <= 1) {
+      alert('旅程至少需要保留一個住宿地區。');
+      return;
+    }
+    const currentBase = bases.find((b) => b.id === accBaseId);
+    const baseName = currentBase?.nameZh || currentBase?.name || '此地區';
+
+    const usedCount = accommodations.filter((a) => a.baseId === accBaseId).length;
+    const msg = usedCount > 0
+      ? `目前有 ${usedCount} 筆住宿記錄屬於「${baseName}」，刪除此地區後，這些住宿的地區關聯將被移轉至其他地區。確定要刪除嗎？`
+      : `確定要刪除住宿地區「${baseName}」嗎？`;
+
+    const ok = await confirm({
+      title: `刪除住宿地區「${baseName}」？`,
+      message: msg,
+      danger: true,
+      confirmLabel: '確認刪除',
+    });
+
+    if (ok) {
+      deleteBase(accBaseId);
+      const remaining = bases.filter((b) => b.id !== accBaseId);
+      if (remaining.length > 0) {
+        setAccBaseId(remaining[0].id);
+      }
+    }
   };
 
   // 儲存住宿
@@ -661,17 +706,84 @@ export const BookingsPage: React.FC = () => {
         >
           <form onSubmit={handleSaveAcc} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Select
-                label="所屬住宿基地"
-                value={accBaseId}
-                onChange={(e) => setAccBaseId(e.target.value)}
-              >
-                {bases.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.nameZh} ({b.name})
-                  </option>
-                ))}
-              </Select>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-stone-700 dark:text-stone-300">
+                    住宿地區
+                  </label>
+                  {!isAddingNewBase ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNewBase(true)}
+                      className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>新增地區</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingNewBase(false);
+                        setNewBaseName('');
+                      }}
+                      className="text-xs text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
+                    >
+                      取消新增
+                    </button>
+                  )}
+                </div>
+
+                {!isAddingNewBase ? (
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex-1">
+                      <Select
+                        value={accBaseId}
+                        onChange={(e) => setAccBaseId(e.target.value)}
+                      >
+                        {bases.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.nameZh} {b.name && b.name !== b.nameZh ? `(${b.name})` : ''}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    {bases.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleDeleteCurrentBase}
+                        icon={<Trash2 className="w-4 h-4 text-stone-400 hover:text-rose-500" />}
+                        title="刪除目前選中的住宿地區"
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      placeholder="輸入新住宿地區 (例如: 札幌、小樽、箱根)"
+                      value={newBaseName}
+                      onChange={(e) => setNewBaseName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleCreateNewBase();
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={handleCreateNewBase}
+                    >
+                      確定
+                    </Button>
+                  </div>
+                )}
+              </div>
 
               <Input
                 label="預約平台"
