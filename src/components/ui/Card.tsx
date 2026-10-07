@@ -5,13 +5,13 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   padding?: 'none' | 'sm' | 'md' | 'lg';
 }
 
-export const Card: React.FC<CardProps> = ({
+export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   children,
   variant = 'default',
   padding = 'md',
   className = '',
   ...props
-}) => {
+}, ref) => {
   const paddingStyles = {
     none: 'p-0',
     sm: 'p-3',
@@ -32,10 +32,13 @@ export const Card: React.FC<CardProps> = ({
 
   return (
     <div
+      ref={ref}
       className={`${variantStyles[variant]} ${paddingStyles[padding]} ${className}`}
       {...props}
     >
       {children}
     </div>
   );
-};
+});
+
+Card.displayName = 'Card';

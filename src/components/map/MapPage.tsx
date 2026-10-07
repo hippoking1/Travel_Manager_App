@@ -245,14 +245,23 @@ export const MapPage: React.FC = () => {
     return [46.8182, 8.2275];
   }, [allPoints, config.bases, config.tripName, activeTrip.destination]);
 
+  const listRef = React.useRef<HTMLDivElement | null>(null);
+
+  // 切換分類或天數時，自動滾動回清單頂部
+  useEffect(() => {
+    if (listRef.current) {
+      listRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [selectedCategory, selectedDay]);
+
   const handleGoToDay = (dayNum: number) => {
     toggleDayExpanded(dayNum);
     setSelectedBaseId('all');
     navigate('/');
   };
 
-  const handleToggleCategory = (cat: string) => {
-    setSelectedCategory((prev) => (prev === cat ? 'all' : cat));
+  const handleSelectCategory = (cat: string) => {
+    setSelectedCategory(cat);
     setActiveLocation(null);
   };
 
@@ -269,19 +278,20 @@ export const MapPage: React.FC = () => {
       <Card className="p-3.5 sm:p-4 space-y-3">
         {/* 天數切換 Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          <span className="text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
-            <Route className="w-3.5 h-3.5 text-[var(--color-primary)]" />
+          <span className="text-xs font-bold text-stone-500 uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
+            <Route className="w-3.5 h-3.5 text-sky-600" />
             <span>路線天數：</span>
           </span>
           <button
+            type="button"
             onClick={() => {
               setSelectedDay('all');
               setActiveLocation(null);
             }}
             className={`px-3 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all ${
               selectedDay === 'all'
-                ? 'bg-[var(--color-primary)] text-white shadow-sm'
-                : 'bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-[var(--color-text)]'
+                ? 'bg-sky-600 text-white font-bold shadow-xs'
+                : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-stone-800 hover:bg-stone-50'
             }`}
           >
             全部天數
@@ -292,14 +302,15 @@ export const MapPage: React.FC = () => {
             return (
               <button
                 key={dayNum}
+                type="button"
                 onClick={() => {
                   setSelectedDay(dayNum);
                   setActiveLocation(null);
                 }}
                 className={`px-2.5 py-1 rounded-xl text-xs font-semibold shrink-0 font-mono transition-all ${
                   isSelected
-                    ? 'bg-[var(--color-primary)] text-white shadow-sm'
-                    : 'bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-[var(--color-text)]'
+                    ? 'bg-sky-600 text-white font-bold shadow-xs'
+                    : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-stone-800 hover:bg-stone-50'
                 }`}
               >
                 Day {dayNum}
@@ -308,17 +319,18 @@ export const MapPage: React.FC = () => {
           })}
         </div>
 
-        {/* 分類篩選按鈕列 (具備 Toggle 與數量即時統計) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none border-t border-[var(--color-border)] pt-2.5">
+        {/* 分類篩選按鈕列 (精準切換與醒目選中樣式) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none border-t border-stone-200 dark:border-stone-800 pt-2.5">
           <button
+            type="button"
             onClick={() => {
               setSelectedCategory('all');
               setActiveLocation(null);
             }}
             className={`px-3 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all ${
               selectedCategory === 'all'
-                ? 'bg-[var(--color-text)] text-[var(--color-bg)] font-bold shadow-sm'
-                : 'bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-[var(--color-text)]'
+                ? 'bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 font-bold shadow-xs ring-2 ring-stone-900 dark:ring-stone-100'
+                : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-stone-800 hover:bg-stone-50'
             }`}
           >
             全部分類 ({categoryCounts.all || 0})
@@ -331,14 +343,15 @@ export const MapPage: React.FC = () => {
             return (
               <button
                 key={cat}
-                onClick={() => handleToggleCategory(cat)}
-                className={`px-2.5 py-1 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1.5 border transition-all ${
+                type="button"
+                onClick={() => handleSelectCategory(cat)}
+                className={`px-2.5 py-1 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1.5 border transition-all cursor-pointer ${
                   isSelected
-                    ? 'bg-[var(--color-bg-subtle)] text-[var(--color-text)] border-[var(--color-primary)] ring-1 ring-[var(--color-primary)] font-bold'
-                    : 'bg-[var(--color-bg)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:text-[var(--color-text)]'
+                    ? 'bg-sky-50 dark:bg-sky-950/70 text-sky-700 dark:text-sky-300 border-2 border-sky-600 dark:border-sky-400 font-bold shadow-xs ring-2 ring-sky-500/20'
+                    : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 border-stone-200 dark:border-stone-800 hover:bg-stone-50'
                 }`}
               >
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: meta.bg }} />
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: meta.bg }} />
                 <span>{meta.label}</span>
                 <span className="text-[10px] opacity-75 font-mono">({count})</span>
               </button>
@@ -350,13 +363,34 @@ export const MapPage: React.FC = () => {
       {/* RWD 佈局：大螢幕雙欄 (左側地點列表、右側 Leaflet 地圖) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* 左側：地點清單卡片 */}
-        <Card className="p-4 max-h-[480px] lg:max-h-[640px] overflow-y-auto space-y-2 shadow-sm order-2 lg:order-1">
-          <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)] font-semibold mb-2">
+        <Card 
+          ref={listRef}
+          className="p-4 max-h-[480px] lg:max-h-[640px] overflow-y-auto space-y-2 shadow-sm order-2 lg:order-1"
+        >
+          {/* 目前分類篩選指示條 */}
+          {selectedCategory !== 'all' && (
+            <div className="flex items-center justify-between bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 px-3 py-1.5 rounded-xl text-xs text-sky-800 dark:text-sky-300 mb-2">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[selectedCategory as LocationCategory]?.bg }} />
+                <span>已篩選分類：<strong>{CATEGORY_COLORS[selectedCategory as LocationCategory]?.label}</strong> ({filteredLocations.length})</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('all')}
+                className="text-[11px] font-bold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer"
+              >
+                清除篩選 ✕
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between text-xs text-stone-500 font-semibold mb-2">
             <span>標記地點 ({filteredLocations.length})</span>
             {activeLocation ? (
               <button
+                type="button"
                 onClick={() => setActiveLocation(null)}
-                className="text-[11px] text-[var(--color-primary)] hover:underline"
+                className="text-[11px] text-sky-600 hover:underline cursor-pointer"
               >
                 重設為全部視野
               </button>
@@ -380,34 +414,34 @@ export const MapPage: React.FC = () => {
                   onClick={() => setActiveLocation(loc)}
                   className={`p-3 rounded-xl border cursor-pointer transition-all ${
                     isCurrent
-                      ? 'bg-[var(--color-primary)]/10 border-[var(--color-primary)] shadow-sm ring-1 ring-[var(--color-primary)]'
-                      : 'bg-[var(--color-bg)] border-[var(--color-border)] hover:border-[var(--color-primary)]/40'
+                      ? 'bg-sky-50 dark:bg-sky-950/50 border-sky-500 shadow-sm ring-1 ring-sky-500'
+                      : 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-800 hover:border-sky-400'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: meta.bg }} />
-                        <h4 className="text-xs sm:text-sm font-bold text-[var(--color-text)]">
+                        <h4 className="text-xs sm:text-sm font-bold text-stone-900 dark:text-stone-100">
                           {loc.nameZh}
                         </h4>
                       </div>
-                      <p className="text-[11px] text-[var(--color-text-muted)]">{loc.name}</p>
+                      <p className="text-[11px] text-stone-500">{loc.name}</p>
                     </div>
 
                     {loc.altitude && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--color-bg-subtle)] text-cyan-600 dark:text-cyan-400 border border-[var(--color-border)] shrink-0">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-cyan-600 dark:text-cyan-400 border border-stone-200 dark:border-stone-700 shrink-0">
                         {loc.altitude}m
                       </span>
                     )}
                   </div>
 
-                  <p className="text-xs text-[var(--color-text-muted)] mt-1.5 line-clamp-2 leading-relaxed">
+                  <p className="text-xs text-stone-600 dark:text-stone-300 mt-1.5 line-clamp-2 leading-relaxed">
                     {loc.description}
                   </p>
 
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-[var(--color-border)] text-[11px]">
-                    <span className="text-[var(--color-text-muted)] font-mono">
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-stone-100 dark:border-stone-800 text-[11px]">
+                    <span className="text-stone-500 font-mono">
                       {loc.dayNumbers?.length > 0 ? `Day ${loc.dayNumbers.join(', ')}` : '常設地點'}
                     </span>
                     {loc.stpNote && (
