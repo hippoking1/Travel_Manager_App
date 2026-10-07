@@ -23,7 +23,8 @@ var DEFAULT_HEADERS = {
   Bookmarks: ["tripId", "id", "locationId", "locationName", "notes", "timestamp"],
   Accommodations: ["tripId", "id", "baseId", "baseNameZh", "hotelName", "roomType", "checkInDate", "checkOutDate", "nights", "bookingPlatform", "confirmationCode", "totalPrice", "currency", "paymentStatus", "paymentStatusLabel", "address", "checkInTimeNotice", "keyPickupNotice", "garbageRulesNotice", "kitchenRulesNotice", "notes"],
   Transports: ["tripId", "id", "category", "categoryLabel", "title", "routeFrom", "routeTo", "departureTime", "operatorNumber", "bookingReference", "seatsInfo", "ticketType", "platformNotice", "luggageNotice", "boardingNotice", "notes"],
-  Itinerary: ["tripId", "dayId", "day", "baseId", "title", "subtitle", "highlights", "timeBlocksJson", "foodNotesJson", "updatedAt"]
+  Itinerary: ["tripId", "dayId", "day", "baseId", "title", "subtitle", "highlights", "timeBlocksJson", "foodNotesJson", "updatedAt"],
+  Locations: ["tripId", "id", "name", "nameZh", "category", "lat", "lng", "altitude", "description", "dayNumbers", "stpNote"]
 };
 
 /**
@@ -42,11 +43,11 @@ function getOrCreateSheet(ss, sheetName) {
 }
 
 /**
- * 確保分頁有標題列
+ * 確保分頁有最新標準標題列 (具備自動升級舊架構能力)
  */
 function ensureHeaders(sheet, sheetName, sampleObj) {
+  var defHeaders = DEFAULT_HEADERS[sheetName];
   if (sheet.getLastRow() === 0 || sheet.getLastColumn() === 0) {
-    var defHeaders = DEFAULT_HEADERS[sheetName];
     if (!defHeaders || defHeaders.length === 0) {
       defHeaders = Object.keys(sampleObj || {});
       if (defHeaders.length === 0) defHeaders = ["tripId", "id", "timestamp"];
@@ -54,7 +55,23 @@ function ensureHeaders(sheet, sheetName, sampleObj) {
     sheet.getRange(1, 1, 1, defHeaders.length).setValues([defHeaders]);
     return defHeaders;
   }
-  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  var existingHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  // 若為系統已知標準分頁，檢查標題是否符合最新架構
+  if (defHeaders && defHeaders.length > 0) {
+    var hasTripId = existingHeaders.indexOf("tripId") > -1;
+    var isItineraryValid = sheetName !== "Itinerary" || existingHeaders.indexOf("timeBlocksJson") > -1;
+
+    // 若缺少關鍵欄位 (如 tripId 或 timeBlocksJson)，自動升級標題列為最新標準標題
+    if (!hasTripId || !isItineraryValid) {
+      sheet.getRange(1, 1, 1, Math.max(existingHeaders.length, defHeaders.length)).clearContent();
+      sheet.getRange(1, 1, 1, defHeaders.length).setValues([defHeaders]);
+      return defHeaders;
+    }
+  }
+
+  return existingHeaders;
 }
 
 /**
@@ -239,7 +256,7 @@ function doPost(e) {
     if (action === "BATCH_SYNC_TRIP") {
       var tripData = payload.tripData || payload;
       var currentTripId = tripId || tripData.id || "trip_main";
-      var stats = { itinerary: 0, accommodations: 0, transports: 0, checklist: 0, expenses: 0, config: 0 };
+      var stats = { itinerary: 0, accommodations: 0, transports: 0, checklist: 0, expenses: 0, config: 0, locations: 0, bookmarks: 0 };
 
       // 輔助函式：全量替換某分頁中屬於 currentTripId 的資料列 (記憶體過濾 + 單次批次寫入，極速避免超時)
       function syncSheetRows(targetSheetName, rawRows, rowMapper) {
@@ -257,10 +274,12 @@ function doPost(e) {
           var existingData = ws.getRange(2, 1, lastR - 1, lastC).getValues();
           if (tColIdx > -1) {
             retainedRows = existingData.filter(function (row) {
-              return String(row[tColIdx]) !== String(currentTripId);
+              var rTrip = String(row[tColIdx]).trim();
+              return rTrip !== "" && rTrip !== String(currentTripId);
             });
           } else {
-            retainedRows = existingData;
+            // 若原有資料無 tripId 欄位，代表為舊版衝突表格，不保留任何髒資料
+            retainedRows = [];
           }
         }
 
@@ -300,6 +319,11 @@ function doPost(e) {
         if (tripData.config.currencies && tripData.config.currencies.primary) {
           configItems.push({ key: "primaryCurrency", value: tripData.config.currencies.primary });
         }
+        if (tripData.config.bases) {
+          configItems.push({ key: "basesJson", value: JSON.stringify(tripData.config.bases) });
+        }
+      } else if (tripData.bases) {
+        configItems.push({ key: "basesJson", value: JSON.stringify(tripData.bases) });
       }
       stats.config = syncSheetRows("TripConfig", configItems, function (c) {
         return { key: c.key, value: String(c.value), updatedAt: new Date().toISOString() };
@@ -405,6 +429,40 @@ function doPost(e) {
         });
       }
 
+      // G. 同步 Locations (景點與地理地圖點位)
+      if (Array.isArray(tripData.locations)) {
+        stats.locations = syncSheetRows("Locations", tripData.locations, function (loc) {
+          return {
+            id: loc.id || Utilities.getUuid(),
+            name: loc.name || "",
+            nameZh: loc.nameZh || loc.name || "",
+            category: loc.category || "viewpoint",
+            lat: loc.lat !== undefined ? loc.lat : "",
+            lng: loc.lng !== undefined ? loc.lng : "",
+            altitude: loc.altitude !== undefined ? loc.altitude : "",
+            description: loc.description || "",
+            dayNumbers: Array.isArray(loc.dayNumbers) ? loc.dayNumbers.join(",") : (loc.dayNumbers || ""),
+            stpNote: loc.stpNote || ""
+          };
+        });
+      }
+
+      // H. 同步 Bookmarks (地圖收藏)
+      if (Array.isArray(tripData.bookmarks)) {
+        stats.bookmarks = syncSheetRows("Bookmarks", tripData.bookmarks, function (bm) {
+          var bmId = typeof bm === "string" ? bm : (bm.locationId || bm.id);
+          var bmName = typeof bm === "string" ? "" : (bm.locationName || "");
+          var bmNotes = typeof bm === "string" ? "" : (bm.notes || "");
+          return {
+            id: Utilities.getUuid(),
+            locationId: bmId,
+            locationName: bmName,
+            notes: bmNotes,
+            timestamp: new Date().toISOString()
+          };
+        });
+      }
+
       SpreadsheetApp.flush();
 
       return jsonResponse({
@@ -413,6 +471,52 @@ function doPost(e) {
         tripId: currentTripId,
         stats: stats,
         message: "全量行程與預訂資料已成功發布至 Google 試算表！"
+      });
+    }
+
+    // 5. 刪除整場旅程雲端所有分頁資料 (DELETE_TRIP)
+    if (action === "DELETE_TRIP") {
+      var targetTripId = tripId || payload.id;
+      if (!targetTripId) {
+        return jsonResponse({ success: false, error: "缺少 tripId" }, 400);
+      }
+      var sheetNames = Object.keys(DEFAULT_HEADERS);
+      var deletedStats = {};
+      for (var s = 0; s < sheetNames.length; s++) {
+        var sName = sheetNames[s];
+        var wsDel = ss.getSheetByName(sName);
+        if (!wsDel) continue;
+        var lastRDel = wsDel.getLastRow();
+        var lastCDel = wsDel.getLastColumn();
+        if (lastRDel < 2 || lastCDel < 1) continue;
+        var headerRowDel = wsDel.getRange(1, 1, 1, lastCDel).getValues()[0];
+        var tColIdxDel = headerRowDel.indexOf("tripId");
+        if (tColIdxDel === -1) continue;
+
+        var existingDataDel = wsDel.getRange(2, 1, lastRDel - 1, lastCDel).getValues();
+        var retainedDel = [];
+        var delCount = 0;
+        for (var rDel = 0; rDel < existingDataDel.length; rDel++) {
+          var rowTripId = String(existingDataDel[rDel][tColIdxDel]).trim();
+          if (rowTripId === String(targetTripId)) {
+            delCount++;
+          } else {
+            retainedDel.push(existingDataDel[rDel]);
+          }
+        }
+        deletedStats[sName] = delCount;
+        wsDel.getRange(2, 1, lastRDel - 1, lastCDel).clearContent();
+        if (retainedDel.length > 0) {
+          wsDel.getRange(2, 1, retainedDel.length, lastCDel).setValues(retainedDel);
+        }
+      }
+      SpreadsheetApp.flush();
+      return jsonResponse({
+        success: true,
+        action: "DELETE_TRIP",
+        tripId: targetTripId,
+        deletedStats: deletedStats,
+        message: "已成功從雲端清除該旅程的所有分頁資料！"
       });
     }
 

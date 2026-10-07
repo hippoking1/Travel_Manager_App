@@ -438,6 +438,11 @@ export const useTripStore = create<TripStoreState>()(
       },
 
       deleteTrip: (tripId) => {
+        if (isGasConfigured()) {
+          mutateSheet('All', 'DELETE_TRIP', { id: tripId }, tripId).catch((err) => {
+            console.error('刪除雲端試算表旅程失敗:', err);
+          });
+        }
         set((state) => {
           if (state.trips.length <= 1) {
             return state;
@@ -1212,6 +1217,7 @@ export const useTripStore = create<TripStoreState>()(
           const allChecklist = Array.isArray(remoteData.Checklist) ? remoteData.Checklist : [];
           const allExpenses = Array.isArray(remoteData.Expenses) ? remoteData.Expenses : [];
           const allBookmarks = Array.isArray(remoteData.Bookmarks) ? remoteData.Bookmarks : [];
+          const allLocations = Array.isArray(remoteData.Locations) ? remoteData.Locations : [];
 
           // 收集雲端試算表中出現的所有 tripId
           const remoteTripIds = Array.from(
@@ -1223,6 +1229,8 @@ export const useTripStore = create<TripStoreState>()(
                 ...allTransports.map((r: any) => r.tripId),
                 ...allChecklist.map((r: any) => r.tripId),
                 ...allExpenses.map((r: any) => r.tripId),
+                ...allBookmarks.map((r: any) => r.tripId),
+                ...allLocations.map((r: any) => r.tripId),
               ].filter(Boolean)
             )
           );
@@ -1234,7 +1242,9 @@ export const useTripStore = create<TripStoreState>()(
             allAccommodations.length > 0 ||
             allTransports.length > 0 ||
             allChecklist.length > 0 ||
-            allExpenses.length > 0;
+            allExpenses.length > 0 ||
+            allLocations.length > 0 ||
+            allBookmarks.length > 0;
 
           if (!hasAnyData) {
             console.log('Google 試算表目前為空，無資料可同步。');
@@ -1262,6 +1272,7 @@ export const useTripStore = create<TripStoreState>()(
               const tripChecklist = allChecklist.filter(isMatch);
               const tripExpenses = allExpenses.filter(isMatch);
               const tripBookmarks = allBookmarks.filter(isMatch);
+              const tripLocations = allLocations.filter(isMatch);
 
               const configMap: Record<string, any> = {};
               tripConfigs.forEach((c: any) => {
@@ -1274,10 +1285,28 @@ export const useTripStore = create<TripStoreState>()(
               const startDate = configMap.startDate || basePlan.config?.startDate || null;
               const primaryCurrency = configMap.primaryCurrency || basePlan.config?.currencies?.primary || 'TWD';
 
-              // 解析 Itinerary (日程景點)
+              // 解析 bases (自訂住宿基地)
+              let bases = basePlan.config?.bases || [];
+              if (configMap.basesJson) {
+                try {
+                  const parsedBases = JSON.parse(configMap.basesJson);
+                  if (Array.isArray(parsedBases) && parsedBases.length > 0) {
+                    bases = parsedBases;
+                  }
+                } catch (e) {
+                  console.warn('解析 basesJson 失敗:', e);
+                }
+              }
+
+              // 解析 Itinerary (日程景點，依 day 精確去重，杜絕重複行與 64 天問題)
               let itinerary: DayItinerary[] = basePlan.itinerary || [];
               if (tripItinerary.length > 0) {
-                itinerary = tripItinerary.map((row: any) => {
+                const dayMap = new Map<number, DayItinerary>();
+
+                tripItinerary.forEach((row: any) => {
+                  const dNum = Number(row.day);
+                  if (!dNum || isNaN(dNum)) return;
+
                   let timeBlocks: TimeBlock[] = [];
                   try {
                     if (typeof row.timeBlocksJson === 'string' && row.timeBlocksJson.trim()) {
@@ -1318,9 +1347,9 @@ export const useTripStore = create<TripStoreState>()(
                     ? row.highlights.split(';').map((s: string) => s.trim()).filter(Boolean)
                     : Array.isArray(row.highlights) ? row.highlights : [];
 
-                  return normalizeDayItinerary({
+                  const parsedDay = normalizeDayItinerary({
                     id: String(row.dayId || `day_${row.day}`),
-                    day: Number(row.day) || 1,
+                    day: dNum,
                     baseId: String(row.baseId || ''),
                     title: String(row.title || `第 ${row.day} 天`),
                     subtitle: String(row.subtitle || ''),
@@ -1328,7 +1357,17 @@ export const useTripStore = create<TripStoreState>()(
                     timeBlocks,
                     foodNotes,
                   });
-                }).sort((a, b) => a.day - b.day);
+
+                  const existing = dayMap.get(dNum);
+                  // 優先保留具有完整活動列表的紀錄
+                  if (!existing || (parsedDay.timeBlocks.length > 0 && existing.timeBlocks.length === 0)) {
+                    dayMap.set(dNum, parsedDay);
+                  }
+                });
+
+                if (dayMap.size > 0) {
+                  itinerary = Array.from(dayMap.values()).sort((a, b) => a.day - b.day);
+                }
               }
 
               // 解析 Accommodations (住宿預訂)
@@ -1434,6 +1473,7 @@ export const useTripStore = create<TripStoreState>()(
                   tripName: name,
                   startDate,
                   totalDays,
+                  bases,
                   currencies: {
                     ...basePlan.config?.currencies,
                     primary: primaryCurrency,
@@ -1447,8 +1487,39 @@ export const useTripStore = create<TripStoreState>()(
                 bookmarks: bookmarks.length > 0 ? bookmarks : basePlan.bookmarks || [],
               });
 
-              // 地圖點位自動提取
-              plan.locations = extractAllTripLocations(plan);
+              // 地圖點位：結合試算表儲存的 Locations 與行程景點抽取的 Locations
+              let remoteLocs: MapLocation[] = [];
+              if (tripLocations.length > 0) {
+                remoteLocs = tripLocations.map((loc: any) => {
+                  const lat = Number(loc.lat) || (Array.isArray(loc.coordinates) ? loc.coordinates[0] : 0);
+                  const lng = Number(loc.lng) || (Array.isArray(loc.coordinates) ? loc.coordinates[1] : 0);
+                  return {
+                    id: String(loc.id || `loc_${Date.now()}`),
+                    name: String(loc.name || ''),
+                    nameZh: String(loc.nameZh || loc.name || ''),
+                    coordinates: [lat, lng] as [number, number],
+                    category: loc.category || 'viewpoint',
+                    altitude: loc.altitude ? Number(loc.altitude) : undefined,
+                    description: String(loc.description || ''),
+                    dayNumbers: typeof loc.dayNumbers === 'string'
+                      ? loc.dayNumbers.split(',').map((n: string) => Number(n.trim())).filter(Boolean)
+                      : Array.isArray(loc.dayNumbers) ? loc.dayNumbers : [],
+                    stpNote: loc.stpNote ? String(loc.stpNote) : undefined,
+                  };
+                }).filter((l: any) => l.name || l.nameZh);
+              }
+
+              const extractedLocs = extractAllTripLocations(plan);
+              const locMap = new Map<string, MapLocation>();
+              remoteLocs.forEach(l => locMap.set(l.nameZh || l.name, l));
+              extractedLocs.forEach(l => {
+                const key = l.nameZh || l.name;
+                if (!locMap.has(key)) {
+                  locMap.set(key, l);
+                }
+              });
+              plan.locations = Array.from(locMap.values());
+
               return plan;
             }
 

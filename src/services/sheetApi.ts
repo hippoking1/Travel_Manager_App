@@ -101,7 +101,7 @@ export async function fetchFromSheet<T = unknown>(
  */
 export async function mutateSheet(
   sheet: string,
-  action: 'APPEND' | 'UPDATE' | 'DELETE' | 'BATCH' | 'BATCH_SYNC_TRIP',
+  action: 'APPEND' | 'UPDATE' | 'DELETE' | 'BATCH' | 'BATCH_SYNC_TRIP' | 'DELETE_TRIP',
   payload: Record<string, unknown>,
   tripId?: string
 ): Promise<{ success: boolean; error?: string; id?: string; stats?: any; message?: string }> {
