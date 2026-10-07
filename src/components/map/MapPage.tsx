@@ -66,6 +66,104 @@ const TILE_LAYERS: Record<
   },
 };
 
+// 子元件：個別點位 Marker，支援選中時自動彈出 Popup 與聚焦高亮
+const LocationMarker: React.FC<{
+  loc: MapLocation;
+  isSelected: boolean;
+  isDimmed: boolean;
+  onSelect: () => void;
+  onGoToDay: (dayNum: number) => void;
+}> = ({ loc, isSelected, isDimmed, onSelect, onGoToDay }) => {
+  const markerRef = React.useRef<L.Marker | null>(null);
+
+  React.useEffect(() => {
+    if (isSelected && markerRef.current) {
+      markerRef.current.openPopup();
+    }
+  }, [isSelected]);
+
+  const icon = useMemo(() => {
+    return createCustomMarkerIcon(loc.category, isSelected);
+  }, [loc.category, isSelected]);
+
+  return (
+    <Marker
+      ref={markerRef}
+      position={loc.coordinates}
+      icon={icon}
+      opacity={isDimmed ? 0.35 : 1}
+      zIndexOffset={isSelected ? 1000 : 0}
+      eventHandlers={{
+        click: onSelect,
+      }}
+    >
+      <Popup autoPan={false}>
+        <div className="p-1 space-y-2 min-w-[200px] max-w-xs text-stone-900 dark:text-stone-100">
+          <div className="border-b border-stone-200 dark:border-stone-700 pb-1.5">
+            <span className="text-[10px] uppercase font-bold text-sky-600 dark:text-sky-400 tracking-wider">
+              {CATEGORY_COLORS[loc.category]?.label || '景點'}
+            </span>
+            <h4 className="text-sm font-bold leading-tight">
+              {loc.nameZh}
+            </h4>
+            <div className="text-[11px] text-stone-500">{loc.name}</div>
+          </div>
+
+          {loc.altitude && (
+            <div className="flex items-center gap-1 text-xs text-cyan-600 dark:text-cyan-400 font-mono">
+              <Compass className="w-3.5 h-3.5" />
+              <span>海拔：{loc.altitude} 公尺</span>
+            </div>
+          )}
+
+          <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
+            {loc.description}
+          </p>
+
+          {loc.stpNote && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/60 p-1.5 rounded text-[11px] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              {loc.stpNote}
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-stone-200 dark:border-stone-700 flex items-center justify-between gap-2">
+            {/* 關聯天數跳轉 */}
+            {loc.dayNumbers?.length > 0 && (
+              <div className="flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-stone-400" />
+                <span className="text-[11px] text-stone-500">行程：</span>
+                {loc.dayNumbers.map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => onGoToDay(d)}
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-primary)] text-white font-bold hover:opacity-90"
+                  >
+                    D{d}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 即時攝影機 */}
+            {loc.webcamUrl && (
+              <a
+                href={loc.webcamUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-sky-600 dark:text-sky-400 font-medium"
+              >
+                <Video className="w-3 h-3" />
+                <span>WebCam</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            )}
+          </div>
+        </div>
+      </Popup>
+    </Marker>
+  );
+};
+
 export const MapPage: React.FC = () => {
   const navigate = useNavigate();
   const activeTrip = useActiveTrip();
@@ -88,6 +186,15 @@ export const MapPage: React.FC = () => {
   const allLocations: MapLocation[] = useMemo(() => {
     return extractAllTripLocations(activeTrip);
   }, [activeTrip]);
+
+  // 各分類數量統計
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: allLocations.length };
+    (Object.keys(CATEGORY_COLORS) as LocationCategory[]).forEach((cat) => {
+      counts[cat] = allLocations.filter((loc) => loc.category === cat).length;
+    });
+    return counts;
+  }, [allLocations]);
 
   // 篩選後的地點
   const filteredLocations = useMemo(() => {
@@ -112,7 +219,6 @@ export const MapPage: React.FC = () => {
       if (tb.coordinates) {
         coordsList.push(tb.coordinates);
       } else {
-        // 從 allLocations 查找對應 locationName 或 title
         const found = allLocations.find(
           (l) => l.name === tb.locationName || l.nameZh === tb.locationName || l.nameZh === tb.title
         );
@@ -145,12 +251,17 @@ export const MapPage: React.FC = () => {
     navigate('/');
   };
 
+  const handleToggleCategory = (cat: string) => {
+    setSelectedCategory((prev) => (prev === cat ? 'all' : cat));
+    setActiveLocation(null);
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
       {/* 標題與簡介 */}
       <PageHeader
         title={`${config.tripName} 地理探索互動地圖`}
-        subtitle="檢視住宿基地、景點海拔與每日行程足跡路線，支援 CARTO 深淺地圖圖磚與自動聚焦"
+        subtitle="檢視住宿基地、景點海拔與每日行程足跡路線，支援自由切換圖磚風格與單點自動彈窗聚焦"
         emoji="🗺️"
       />
 
@@ -197,34 +308,39 @@ export const MapPage: React.FC = () => {
           })}
         </div>
 
-        {/* 分類篩選按鈕列 */}
+        {/* 分類篩選按鈕列 (具備 Toggle 與數量即時統計) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none border-t border-[var(--color-border)] pt-2.5">
           <button
-            onClick={() => setSelectedCategory('all')}
+            onClick={() => {
+              setSelectedCategory('all');
+              setActiveLocation(null);
+            }}
             className={`px-3 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all ${
               selectedCategory === 'all'
                 ? 'bg-[var(--color-text)] text-[var(--color-bg)] font-bold shadow-sm'
                 : 'bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-[var(--color-text)]'
             }`}
           >
-            全部分類 ({allLocations.length})
+            全部分類 ({categoryCounts.all || 0})
           </button>
 
           {(Object.keys(CATEGORY_COLORS) as LocationCategory[]).map((cat) => {
             const meta = CATEGORY_COLORS[cat];
             const isSelected = selectedCategory === cat;
+            const count = categoryCounts[cat] || 0;
             return (
               <button
                 key={cat}
-                onClick={() => setSelectedCategory(cat)}
+                onClick={() => handleToggleCategory(cat)}
                 className={`px-2.5 py-1 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1.5 border transition-all ${
                   isSelected
-                    ? 'bg-[var(--color-bg-subtle)] text-[var(--color-text)] border-[var(--color-primary)] ring-1 ring-[var(--color-primary)]'
+                    ? 'bg-[var(--color-bg-subtle)] text-[var(--color-text)] border-[var(--color-primary)] ring-1 ring-[var(--color-primary)] font-bold'
                     : 'bg-[var(--color-bg)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:text-[var(--color-text)]'
                 }`}
               >
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: meta.bg }} />
                 <span>{meta.label}</span>
+                <span className="text-[10px] opacity-75 font-mono">({count})</span>
               </button>
             );
           })}
@@ -237,7 +353,16 @@ export const MapPage: React.FC = () => {
         <Card className="p-4 max-h-[480px] lg:max-h-[640px] overflow-y-auto space-y-2 shadow-sm order-2 lg:order-1">
           <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)] font-semibold mb-2">
             <span>標記地點 ({filteredLocations.length})</span>
-            <span>點擊快速聚焦</span>
+            {activeLocation ? (
+              <button
+                onClick={() => setActiveLocation(null)}
+                className="text-[11px] text-[var(--color-primary)] hover:underline"
+              >
+                重設為全部視野
+              </button>
+            ) : (
+              <span>點擊快速聚焦</span>
+            )}
           </div>
 
           {filteredLocations.length === 0 ? (
@@ -255,7 +380,7 @@ export const MapPage: React.FC = () => {
                   onClick={() => setActiveLocation(loc)}
                   className={`p-3 rounded-xl border cursor-pointer transition-all ${
                     isCurrent
-                      ? 'bg-[var(--color-primary)]/10 border-[var(--color-primary)] shadow-sm'
+                      ? 'bg-[var(--color-primary)]/10 border-[var(--color-primary)] shadow-sm ring-1 ring-[var(--color-primary)]'
                       : 'bg-[var(--color-bg)] border-[var(--color-border)] hover:border-[var(--color-primary)]/40'
                   }`}
                 >
@@ -299,6 +424,22 @@ export const MapPage: React.FC = () => {
 
         {/* 右側：全功能 Leaflet 地圖容器 */}
         <div className="lg:col-span-2 h-[420px] sm:h-[500px] lg:h-[640px] rounded-2xl overflow-hidden border border-[var(--color-border)] shadow-md relative order-1 lg:order-2 z-10">
+          {/* 當前聚焦地點指示浮層 */}
+          {activeLocation && (
+            <div className="absolute top-3 left-3 z-[1000] flex items-center gap-2 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[var(--color-primary)] shadow-md text-xs">
+              <span className="w-2 h-2 rounded-full bg-[var(--color-primary)] animate-pulse" />
+              <span className="font-bold text-[var(--color-text)]">
+                {activeLocation.nameZh}
+              </span>
+              <button
+                onClick={() => setActiveLocation(null)}
+                className="ml-1 text-[11px] px-2 py-0.5 rounded-md bg-[var(--color-bg-subtle)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] border border-[var(--color-border)]"
+              >
+                重設視野
+              </button>
+            </div>
+          )}
+
           {/* 圖層風格切換控制膠囊 (免 API Key，自由切換標準 / 地形 / 衛星) */}
           <div className="absolute top-3 right-3 z-[1000] flex items-center bg-white/90 dark:bg-stone-900/90 backdrop-blur-md border border-stone-200 dark:border-stone-800 rounded-xl p-1 shadow-md gap-1">
             {(Object.keys(TILE_LAYERS) as MapLayerType[]).map((key) => {
@@ -356,84 +497,20 @@ export const MapPage: React.FC = () => {
               />
             )}
 
-            {/* 地圖圖釘 Markers */}
+            {/* 地圖圖釘 Markers：支援選取時自動展開 Popup 與淡化未選取圖釘 */}
             {filteredLocations.map((loc) => {
               const isSelected = activeLocation?.id === loc.id;
-              const icon = createCustomMarkerIcon(loc.category, isSelected);
+              const isDimmed = activeLocation !== null && !isSelected;
 
               return (
-                <Marker
+                <LocationMarker
                   key={loc.id}
-                  position={loc.coordinates}
-                  icon={icon}
-                  eventHandlers={{
-                    click: () => setActiveLocation(loc),
-                  }}
-                >
-                  <Popup>
-                    <div className="p-1 space-y-2 min-w-[200px] max-w-xs text-stone-900 dark:text-stone-100">
-                      <div className="border-b border-stone-200 dark:border-stone-700 pb-1.5">
-                        <span className="text-[10px] uppercase font-bold text-sky-600 dark:text-sky-400 tracking-wider">
-                          {CATEGORY_COLORS[loc.category]?.label || '景點'}
-                        </span>
-                        <h4 className="text-sm font-bold leading-tight">
-                          {loc.nameZh}
-                        </h4>
-                        <div className="text-[11px] text-stone-500">{loc.name}</div>
-                      </div>
-
-                      {loc.altitude && (
-                        <div className="flex items-center gap-1 text-xs text-cyan-600 dark:text-cyan-400 font-mono">
-                          <Compass className="w-3.5 h-3.5" />
-                          <span>海拔：{loc.altitude} 公尺</span>
-                        </div>
-                      )}
-
-                      <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                        {loc.description}
-                      </p>
-
-                      {loc.stpNote && (
-                        <div className="bg-emerald-50 dark:bg-emerald-950/60 p-1.5 rounded text-[11px] text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                          {loc.stpNote}
-                        </div>
-                      )}
-
-                      <div className="pt-2 border-t border-stone-200 dark:border-stone-700 flex items-center justify-between gap-2">
-                        {/* 關聯天數跳轉 */}
-                        {loc.dayNumbers?.length > 0 && (
-                          <div className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-stone-400" />
-                            <span className="text-[11px] text-stone-500">行程：</span>
-                            {loc.dayNumbers.map((d) => (
-                              <button
-                                key={d}
-                                onClick={() => handleGoToDay(d)}
-                                className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-primary)] text-white font-bold"
-                              >
-                                D{d}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* 即時攝影機 */}
-                        {loc.webcamUrl && (
-                          <a
-                            href={loc.webcamUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] text-sky-600 dark:text-sky-400 font-medium"
-                          >
-                            <Video className="w-3 h-3" />
-                            <span>WebCam</span>
-                            <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </Popup>
-                </Marker>
+                  loc={loc}
+                  isSelected={isSelected}
+                  isDimmed={isDimmed}
+                  onSelect={() => setActiveLocation(loc)}
+                  onGoToDay={handleGoToDay}
+                />
               );
             })}
           </MapContainer>

@@ -13,7 +13,7 @@ import type { TripImportV1 } from './schema';
 import { autoScheduleDayBlocks } from './schedule';
 import { DEFAULT_CHECKLIST } from '../../data/clothing-checklist';
 import { DEFAULT_CURRENCY_CONFIG } from '../../utils/currency';
-import { extractAllTripLocations } from '../geo';
+import { extractAllTripLocations, inferCoordinates } from '../geo';
 
 export interface ConvertResult {
   plan: TripPlan;
@@ -35,6 +35,81 @@ export interface MergeResult {
 /** 預設色票供基地分配 */
 const BASE_COLORS = ['#0EA5E9', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6'];
 
+/** 輔助：從匯入的 bases 與 accommodations 動態建立精準的住宿地區清單 */
+function deriveBases(
+  importBases?: any[],
+  importAccommodations?: any[],
+  destination: string = ''
+): BaseInfo[] {
+  const bases: BaseInfo[] = [];
+  const seenNames = new Set<string>();
+
+  if (importBases && importBases.length > 0) {
+    importBases.forEach((b, idx) => {
+      const name = b.nameZh || b.name || `住宿地區 ${idx + 1}`;
+      seenNames.add(name.toLowerCase());
+      bases.push({
+        id: b.id || `base_${idx + 1}`,
+        name: b.name || name,
+        nameZh: name,
+        days: b.days || [],
+        color: b.color || BASE_COLORS[idx % BASE_COLORS.length],
+        hotelName: b.hotelName || `${name} 推薦住宿`,
+        hotelAddress: b.hotelAddress,
+        coordinates: b.coordinates || inferCoordinates(name, b.hotelName, destination),
+        notes: b.notes,
+      });
+    });
+  }
+
+  // 若還有 accommodations 中未涵蓋的地區，自動補充或從 accommodations 提煉真實基地
+  if (importAccommodations && importAccommodations.length > 0) {
+    importAccommodations.forEach((acc, idx) => {
+      // 若該住宿已經對應到已存在的 baseId，則直接跳過，不重複建立
+      if (acc.baseId && bases.some((b) => b.id === acc.baseId)) {
+        return;
+      }
+
+      const area = (acc.baseNameZh || '').trim() || (acc.hotelName || '').trim();
+      const normArea = area.toLowerCase();
+
+      // 若既有基地已有此名稱或地區，亦不重複建立
+      if (bases.some((b) => b.nameZh?.toLowerCase().includes(normArea) || b.name?.toLowerCase().includes(normArea))) {
+        return;
+      }
+
+      if (area && !seenNames.has(normArea)) {
+        seenNames.add(normArea);
+        const coords = inferCoordinates(acc.hotelName, acc.address, `${area} ${destination}`);
+        bases.push({
+          id: acc.baseId || `base_acc_${idx + 1}`,
+          name: area,
+          nameZh: area,
+          days: [],
+          color: BASE_COLORS[bases.length % BASE_COLORS.length],
+          hotelName: acc.hotelName,
+          hotelAddress: acc.address,
+          coordinates: coords,
+        });
+      }
+    });
+  }
+
+  if (bases.length === 0) {
+    // 備援主基地
+    bases.push({
+      id: 'base_main',
+      name: destination || '主要基地',
+      nameZh: destination || '主要基地',
+      days: [],
+      color: '#0EA5E9',
+      hotelName: '市中心便利住宿',
+    });
+  }
+
+  return bases;
+}
+
 /**
  * 將匯入資料轉換為全新獨立的 TripPlan
  */
@@ -42,44 +117,27 @@ export function importToNewTripPlan(importData: TripImportV1): ConvertResult {
   const warnings: string[] = [];
   const tripId = `trip_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const nowIso = new Date().toISOString();
+  const destination = importData.trip.destination || importData.trip.name || '';
 
-  // 1. 整理基地 Bases
-  const bases: BaseInfo[] = [];
-  if (importData.bases && importData.bases.length > 0) {
-    importData.bases.forEach((b, idx) => {
-      bases.push({
-        id: b.id || `base_${idx + 1}`,
-        name: b.name,
-        nameZh: b.nameZh || b.name,
-        days: b.days || [],
-        color: b.color || BASE_COLORS[idx % BASE_COLORS.length],
-        hotelName: b.hotelName || `${b.name} 推薦住宿`,
-        hotelAddress: b.hotelAddress,
-        coordinates: b.coordinates,
-        notes: b.notes,
-      });
-    });
-  } else {
-    // 預設建立一個主基地
-    bases.push({
-      id: 'base_main',
-      name: importData.trip.destination || '主要基地',
-      nameZh: importData.trip.destination || '主要基地',
-      days: importData.itinerary.map((d) => d.day),
-      color: '#0EA5E9',
-      hotelName: '市中心便利住宿',
-    });
-  }
-
+  // 1. 動態整理真實基地 Bases
+  const bases = deriveBases(importData.bases, importData.accommodations, destination);
   const defaultBaseId = bases[0].id;
 
   // 2. 排程每日日程
   const itinerary: DayItinerary[] = [];
   importData.itinerary.forEach((dayData, idx) => {
     const dayNumber = dayData.day || idx + 1;
-    const baseId = dayData.baseId && bases.some((b) => b.id === dayData.baseId) 
+    // 嘗試智能匹配 baseId：若 day 指定了 baseId 且存在則使用；若無則依天數區間或首個 base
+    let baseId = dayData.baseId && bases.some((b) => b.id === dayData.baseId) 
       ? dayData.baseId 
       : defaultBaseId;
+
+    if (!dayData.baseId && bases.length > 1) {
+      // 平均依天數分攤至各 base
+      const daysPerBase = Math.max(1, Math.ceil(importData.itinerary.length / bases.length));
+      const baseIdx = Math.min(Math.floor(idx / daysPerBase), bases.length - 1);
+      baseId = bases[baseIdx].id;
+    }
 
     const { blocks, warnings: dayWarnings } = autoScheduleDayBlocks(
       dayData.timeBlocks || [],
@@ -114,7 +172,8 @@ export function importToNewTripPlan(importData: TripImportV1): ConvertResult {
   const accommodations: AccommodationBooking[] = [];
   if (importData.accommodations && importData.accommodations.length > 0) {
     importData.accommodations.forEach((acc, idx) => {
-      const baseObj = bases.find((b) => b.id === acc.baseId) || bases[0];
+      // 依 baseId 或 baseNameZh 找到對應的 base
+      const baseObj = bases.find((b) => b.id === acc.baseId || b.nameZh === acc.baseNameZh) || bases[idx % bases.length] || bases[0];
       accommodations.push({
         id: acc.id || `acc_${Date.now()}_${idx + 1}`,
         baseId: baseObj.id,
@@ -356,34 +415,58 @@ export function mergeImportToExistingPlan(
 
   const nextTransports = [...preservedTransports, ...importedTransports];
 
-  // 3. 處理基地 Bases (擴增或更新)
-  const nextBases = [...existingPlan.config.bases];
-  if (importData.bases && importData.bases.length > 0) {
-    importData.bases.forEach((b, idx) => {
-      const existingIdx = nextBases.findIndex((eb) => eb.id === b.id || eb.name === b.name);
-      if (existingIdx >= 0) {
-        nextBases[existingIdx] = {
-          ...nextBases[existingIdx],
-          nameZh: b.nameZh || nextBases[existingIdx].nameZh,
-          hotelName: b.hotelName || nextBases[existingIdx].hotelName,
-          hotelAddress: b.hotelAddress || nextBases[existingIdx].hotelAddress,
-          coordinates: b.coordinates || nextBases[existingIdx].coordinates,
-          notes: b.notes || nextBases[existingIdx].notes,
-        };
-      } else {
-        nextBases.push({
-          id: b.id || `base_imp_${Date.now()}_${idx + 1}`,
-          name: b.name,
-          nameZh: b.nameZh || b.name,
-          days: b.days || [],
-          color: b.color || BASE_COLORS[nextBases.length % BASE_COLORS.length],
-          hotelName: b.hotelName || `${b.name} 住宿`,
-          hotelAddress: b.hotelAddress,
-          coordinates: b.coordinates,
-          notes: b.notes,
-        });
+  // 3. 處理基地 Bases
+  let nextBases: BaseInfo[] = [];
+
+  if (mode === 'replace') {
+    // 覆蓋模式：先提取匯入的新 bases (或從 accommodations 提煉)
+    const freshBases = deriveBases(
+      importData.bases,
+      importData.accommodations,
+      existingPlan.destination || existingPlan.name
+    );
+
+    // 若有因含訂單編號而保留的舊住宿，保留其關聯的舊 base
+    const preservedBaseIds = new Set(preservedAccommodations.map((a) => a.baseId));
+    const retainedBases = existingPlan.config.bases.filter((b) => preservedBaseIds.has(b.id));
+
+    // 合併 freshBases 與 retainedBases (去重)
+    nextBases = [...retainedBases];
+    freshBases.forEach((fb) => {
+      if (!nextBases.some((b) => b.id === fb.id || b.nameZh === fb.nameZh)) {
+        nextBases.push(fb);
       }
     });
+  } else {
+    // 追加模式：保留原有 bases 並擴增
+    nextBases = [...existingPlan.config.bases];
+    if (importData.bases && importData.bases.length > 0) {
+      importData.bases.forEach((b, idx) => {
+        const existingIdx = nextBases.findIndex((eb) => eb.id === b.id || eb.name === b.name);
+        if (existingIdx >= 0) {
+          nextBases[existingIdx] = {
+            ...nextBases[existingIdx],
+            nameZh: b.nameZh || nextBases[existingIdx].nameZh,
+            hotelName: b.hotelName || nextBases[existingIdx].hotelName,
+            hotelAddress: b.hotelAddress || nextBases[existingIdx].hotelAddress,
+            coordinates: b.coordinates || nextBases[existingIdx].coordinates,
+            notes: b.notes || nextBases[existingIdx].notes,
+          };
+        } else {
+          nextBases.push({
+            id: b.id || `base_imp_${Date.now()}_${idx + 1}`,
+            name: b.name,
+            nameZh: b.nameZh || b.name,
+            days: b.days || [],
+            color: b.color || BASE_COLORS[nextBases.length % BASE_COLORS.length],
+            hotelName: b.hotelName || `${b.name} 住宿`,
+            hotelAddress: b.hotelAddress,
+            coordinates: b.coordinates,
+            notes: b.notes,
+          });
+        }
+      });
+    }
   }
 
   const defaultBaseId = nextBases[0]?.id || 'base_main';
@@ -504,6 +587,7 @@ export function mergeImportToExistingPlan(
     checklist: nextChecklist,
     accommodations: nextAccommodations,
     transports: nextTransports,
+    locations: mode === 'replace' ? [] : (existingPlan.locations || []),
   };
 
   updatedPlan.locations = extractAllTripLocations(updatedPlan);

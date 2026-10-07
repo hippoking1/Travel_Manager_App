@@ -156,4 +156,61 @@ describe('geo - extractAllTripLocations', () => {
     expect(canalLoc).toBeDefined();
     expect(canalLoc?.dayNumbers).toContain(2);
   });
+
+  it('strictly excludes demo template bases like "盧塞恩住宿基地" and accurately reflects only the 4 accommodations', () => {
+    const tripWith4Hotels: TripPlan = {
+      id: 'trip_custom_swiss_10d',
+      name: '瑞士純淨阿爾卑斯 10 日遊',
+      destination: '瑞士',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+      config: {
+        tripName: '瑞士純淨阿爾卑斯 10 日遊',
+        subtitle: '',
+        startDate: '2027-06-01',
+        totalDays: 10,
+        travelers: [],
+        bases: [
+          { id: 'b_stmoritz', name: 'St. Moritz', nameZh: '聖莫里茨', days: [1, 2], color: '#0EA5E9', hotelName: '聖莫里茨湖畔度假飯店' },
+          { id: 'b_zermatt', name: 'Zermatt', nameZh: '策馬特', days: [3, 4, 5], color: '#10B981', hotelName: '策馬特高山木屋' },
+          { id: 'b_grindelwald', name: 'Grindelwald', nameZh: '格林德瓦', days: [6, 7, 8], color: '#F59E0B', hotelName: '格林德瓦冰川景觀飯店' },
+          { id: 'b_luzern', name: 'Luzern', nameZh: '琉森', days: [9, 10], color: '#8B5CF6', hotelName: '琉森湖畔古典飯店' },
+        ],
+        currencies: DEFAULT_CURRENCY_CONFIG,
+      },
+      itinerary: [],
+      backlog: [],
+      modules: ['swiss'],
+      locations: [
+        // 模擬可能遺留的舊示範點
+        { id: 'loc-demo-luzern', name: 'Luzern Base', nameZh: '盧塞恩住宿基地', coordinates: [47.0502, 8.3093], category: 'base', dayNumbers: [1], description: '舊示範' }
+      ],
+      expenses: [],
+      checklist: [],
+      accommodations: [
+        { id: 'acc_1', baseId: 'b_stmoritz', baseNameZh: '聖莫里茨', hotelName: '聖莫里茨湖畔度假飯店', roomType: '湖景雙人房', checkInDate: '2027-06-01', checkOutDate: '2027-06-03', nights: 2, bookingPlatform: 'Agoda', confirmationCode: '', totalPrice: 600, currency: 'CHF', paymentStatus: 'pay_at_property', paymentStatusLabel: '現場付款', address: 'Via Serlas 27', checkInTimeNotice: '', keyPickupNotice: '', garbageRulesNotice: '', kitchenRulesNotice: '' },
+        { id: 'acc_2', baseId: 'b_zermatt', baseNameZh: '策馬特', hotelName: '策馬特高山木屋', roomType: '馬特洪峰景觀房', checkInDate: '2027-06-03', checkOutDate: '2027-06-06', nights: 3, bookingPlatform: 'Booking', confirmationCode: '', totalPrice: 900, currency: 'CHF', paymentStatus: 'pay_at_property', paymentStatusLabel: '現場付款', address: 'Bahnhofstrasse 12', checkInTimeNotice: '', keyPickupNotice: '', garbageRulesNotice: '', kitchenRulesNotice: '' },
+        { id: 'acc_3', baseId: 'b_grindelwald', baseNameZh: '格林德瓦', hotelName: '格林德瓦冰川景觀飯店', roomType: '艾格峰景家庭房', checkInDate: '2027-06-06', checkOutDate: '2027-06-09', nights: 3, bookingPlatform: 'Hotels.com', confirmationCode: '', totalPrice: 1050, currency: 'CHF', paymentStatus: 'pay_at_property', paymentStatusLabel: '現場付款', address: 'Dorfstrasse 88', checkInTimeNotice: '', keyPickupNotice: '', garbageRulesNotice: '', kitchenRulesNotice: '' },
+        { id: 'acc_4', baseId: 'b_luzern', baseNameZh: '琉森', hotelName: '琉森湖畔古典飯店', roomType: '湖畔奢華套房', checkInDate: '2027-06-09', checkOutDate: '2027-06-11', nights: 2, bookingPlatform: 'Official', confirmationCode: '', totalPrice: 800, currency: 'CHF', paymentStatus: 'pay_at_property', paymentStatusLabel: '現場付款', address: 'Schweizerhofquai 3', checkInTimeNotice: '', keyPickupNotice: '', garbageRulesNotice: '', kitchenRulesNotice: '' },
+      ],
+      transports: [],
+      bookmarks: [],
+    };
+
+    const extracted = extractAllTripLocations(tripWith4Hotels);
+    const baseLocations = extracted.filter((l) => l.category === 'base');
+
+    // 1. 住宿基地分類必須精準剛好是 4 筆住宿
+    expect(baseLocations.length).toBe(4);
+
+    // 2. 舊範本的「盧塞恩住宿基地」必須被徹底剔除
+    const demoBase = extracted.find((l) => l.nameZh === '盧塞恩住宿基地');
+    expect(demoBase).toBeUndefined();
+
+    // 3. 這 4 筆住宿必須精確對應
+    expect(baseLocations.some((b) => b.nameZh.includes('聖莫里茨湖畔度假飯店'))).toBe(true);
+    expect(baseLocations.some((b) => b.nameZh.includes('策馬特高山木屋'))).toBe(true);
+    expect(baseLocations.some((b) => b.nameZh.includes('格林德瓦冰川景觀飯店'))).toBe(true);
+    expect(baseLocations.some((b) => b.nameZh.includes('琉森湖畔古典飯店'))).toBe(true);
+  });
 });
