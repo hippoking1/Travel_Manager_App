@@ -17,7 +17,10 @@ import { Button } from '../ui/Button';
 
 export const SyncIndicator: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<SyncStatusState>(syncManager.getStatus());
-  const { fetchLatestFromSheets, isFetchingRemote } = useTripStore();
+  const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isPushing, setIsPushing] = useState(false);
+
+  const { fetchLatestFromSheets, pushActiveTripToSheets, isFetchingRemote, config } = useTripStore();
 
   useEffect(() => {
     const unsubscribe = syncManager.subscribe((status) => {
@@ -27,15 +30,39 @@ export const SyncIndicator: React.FC = () => {
   }, []);
 
   const handleManualSync = async () => {
+    setPushResult(null);
     await syncManager.flushQueue();
     await fetchLatestFromSheets();
+  };
+
+  const handleFullPush = async () => {
+    setIsPushing(true);
+    setPushResult(null);
+    try {
+      const res = await pushActiveTripToSheets();
+      if (res.success) {
+        setPushResult({
+          success: true,
+          message: res.stats
+            ? `已發布！包含 ${res.stats.itinerary || 0} 天行程、${res.stats.accommodations || 0} 筆住宿、${res.stats.checklist || 0} 項清單`
+            : res.message || '已成功將整份行程推播至 Google 試算表！',
+        });
+      } else {
+        setPushResult({
+          success: false,
+          message: res.error || '推播失敗，請檢查網路或 Apps Script URL',
+        });
+      }
+    } finally {
+      setIsPushing(false);
+    }
   };
 
   const handleClearQueue = () => {
     syncManager.clearQueue();
   };
 
-  const isWorking = syncStatus.isSyncing || isFetchingRemote;
+  const isWorking = syncStatus.isSyncing || isFetchingRemote || isPushing;
   const hasError = !!syncStatus.lastError;
   const hasPending = syncStatus.pendingQueueCount > 0;
 
@@ -99,11 +126,11 @@ export const SyncIndicator: React.FC = () => {
       )}
     >
       {({ close }) => (
-        <div className="w-72 sm:w-80 p-4 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-xl text-xs space-y-3">
+        <div className="w-72 sm:w-88 p-4 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-xl text-xs space-y-3">
           <div className="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-2">
             <span className="font-bold text-stone-900 dark:text-stone-100 text-sm flex items-center gap-1.5">
               <Cloud className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-              <span>雲端資料同步狀態</span>
+              <span>Google Sheets 雲端同步中心</span>
             </span>
             <button
               type="button"
@@ -114,22 +141,29 @@ export const SyncIndicator: React.FC = () => {
             </button>
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 bg-stone-50 dark:bg-stone-800/50 p-2.5 rounded-xl border border-stone-100 dark:border-stone-800">
             <div className="flex items-center justify-between">
-              <span className="text-stone-500 dark:text-stone-400">Google Sheets 連線：</span>
+              <span className="text-stone-500 dark:text-stone-400">當前作用中旅程：</span>
+              <span className="font-bold text-stone-800 dark:text-stone-200 truncate max-w-[160px]">
+                {config.tripName || '未命名旅程'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-stone-500 dark:text-stone-400">雲端連線狀態：</span>
               {syncStatus.isConfigured ? (
                 <span className="text-teal-600 dark:text-teal-400 font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> 已設定 URL
+                  <CheckCircle2 className="w-3.5 h-3.5" /> 已綁定 Web App
                 </span>
               ) : (
                 <span className="text-stone-500 font-medium flex items-center gap-1">
-                  <CloudOff className="w-3.5 h-3.5" /> 本機模式 (未連線)
+                  <CloudOff className="w-3.5 h-3.5" /> 本機模式 (未綁定)
                 </span>
               )}
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-stone-500 dark:text-stone-400">排隊待同步筆數：</span>
+              <span className="text-stone-500 dark:text-stone-400">待傳送暫存佇列：</span>
               <span className={`font-mono font-bold ${hasPending ? 'text-amber-600 dark:text-amber-400' : 'text-stone-700 dark:text-stone-300'}`}>
                 {syncStatus.pendingQueueCount} 筆
               </span>
@@ -145,11 +179,25 @@ export const SyncIndicator: React.FC = () => {
             )}
           </div>
 
+          {pushResult && (
+            <div className={`p-2.5 rounded-xl border text-[11px] space-y-1 ${
+              pushResult.success
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                : 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300'
+            }`}>
+              <div className="font-bold flex items-center gap-1">
+                {pushResult.success ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <AlertTriangle className="w-3.5 h-3.5 text-red-600" />}
+                <span>{pushResult.success ? '推播成功！' : '推播失敗：'}</span>
+              </div>
+              <p className="leading-relaxed">{pushResult.message}</p>
+            </div>
+          )}
+
           {syncStatus.lastError && (
             <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300 text-[11px] space-y-1">
               <div className="font-bold flex items-center gap-1">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                <span>同步失敗提示：</span>
+                <span>錯誤提示：</span>
               </div>
               <p className="line-clamp-2 font-mono text-[10px] opacity-90">
                 {syncStatus.lastError}
@@ -158,16 +206,39 @@ export const SyncIndicator: React.FC = () => {
           )}
 
           <div className="space-y-2 pt-2 border-t border-stone-100 dark:border-stone-800">
+            {/* 核心功能：一鍵將當前行程推播至 Google 試算表 */}
             <Button
               variant="primary"
               size="sm"
-              onClick={handleManualSync}
-              loading={isWorking}
-              icon={<RefreshCw className="w-3.5 h-3.5" />}
-              className="w-full"
+              onClick={handleFullPush}
+              loading={isPushing}
+              icon={<Cloud className="w-3.5 h-3.5" />}
+              className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold"
             >
-              {isWorking ? '同步處理中...' : '手動執行雲端同步'}
+              {isPushing ? '正在發布整份行程至試算表...' : '🚀 一鍵發布當前行程至 Google 試算表'}
             </Button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleManualSync}
+                loading={isWorking && !isPushing}
+                icon={<RefreshCw className="w-3 h-3" />}
+                className="text-xs"
+              >
+                拉取雲端更新
+              </Button>
+
+              <a
+                href="https://docs.google.com/spreadsheets/d/1CbeP5RJPTVrFCdFZDVDzT3zkwiQtf7Twyhenox0siiA/edit"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 text-xs font-semibold"
+              >
+                <span>開啟試算表 ↗</span>
+              </a>
+            </div>
 
             {hasPending && (
               <Button
@@ -175,9 +246,9 @@ export const SyncIndicator: React.FC = () => {
                 size="sm"
                 onClick={handleClearQueue}
                 icon={<Trash2 className="w-3.5 h-3.5 text-amber-500" />}
-                className="w-full text-xs"
+                className="w-full text-xs text-amber-600"
               >
-                清空卡住的佇列 ({syncStatus.pendingQueueCount})
+                清空排隊佇列 ({syncStatus.pendingQueueCount})
               </Button>
             )}
 
@@ -186,7 +257,7 @@ export const SyncIndicator: React.FC = () => {
               onClick={close}
               className="block text-center text-[11px] text-stone-400 hover:text-teal-600 dark:hover:text-teal-400 pt-1"
             >
-              設定 Google Apps Script 網址 ➔
+              檢查 / 變更 Google Apps Script 網址 ➔
             </Link>
           </div>
         </div>

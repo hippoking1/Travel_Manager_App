@@ -50,12 +50,25 @@ export const SettingsPage: React.FC = () => {
     setModules,
     fetchLatestFromSheets,
     isFetchingRemote,
+    pushActiveTripToSheets,
   } = useTripStore();
 
   const confirm = useConfirm();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [showNewTripModal, setShowNewTripModal] = useState(false);
+  const [isPushing, setIsPushing] = useState(false);
+  const [pushResult, setPushResult] = useState<{
+    success: boolean;
+    message: string;
+    stats?: {
+      days?: number;
+      accommodations?: number;
+      transports?: number;
+      checklist?: number;
+      expenses?: number;
+    };
+  } | null>(null);
 
   // 表單內部狀態
   const [tripName, setTripName] = useState(config.tripName);
@@ -163,6 +176,39 @@ export const SettingsPage: React.FC = () => {
       setTestResult('🟢 連線成功！已從 Google Sheets 載入最新數據。');
     } else {
       setTestResult('⚠️ 連線設定已儲存 (若無網路或未部署，將先行暫存本機)。');
+    }
+  };
+
+  // 全量發布至 Google 試算表
+  const handlePushTrip = async () => {
+    if (!gasUrl.trim()) {
+      setPushResult({
+        success: false,
+        message: '請先在下方填寫 Google Apps Script Web App URL 並儲存。',
+      });
+      return;
+    }
+    setIsPushing(true);
+    setPushResult(null);
+    try {
+      const res = await pushActiveTripToSheets();
+      if (res.success) {
+        setPushResult({
+          success: true,
+          message: res.message || '旅程資料已成功同步發布至 Google 試算表！',
+          stats: res.stats,
+        });
+      } else {
+        setPushResult({
+          success: false,
+          message: res.error || '發布失敗，請確認 Apps Script 部署 URL 與密鑰是否相符。',
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPushResult({ success: false, message: `發布發生錯誤: ${msg}` });
+    } finally {
+      setIsPushing(false);
     }
   };
 
@@ -745,69 +791,134 @@ export const SettingsPage: React.FC = () => {
 
       {/* Tab 5: 雲端同步 */}
       {activeTab === 'sync' && (
-        <form onSubmit={handleSaveGasConfig} className="space-y-4">
-          <Card className="p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
-              <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
-                <Cloud className="w-4 h-4 text-sky-500" />
-                <span>Google Sheets 試算表資料庫綁定</span>
-              </h3>
-
-              <a
-                href="https://github.com/hippoking1/Travel_Manager_App/blob/main/google-apps-script/SETUP.md"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-sky-600 dark:text-sky-400 hover:underline inline-flex items-center gap-1"
-              >
-                <span>部署圖文教學</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-
-            <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
-              將部署完成的 Google Apps Script (GAS) 網頁應用程式 URL 填入下方，即可與家人即時記帳、打勾行李與同步備忘。
-            </p>
-
-            <Input
-              label="Apps Script Web App URL"
-              type="url"
-              value={gasUrl}
-              onChange={(e) => setGasUrl(e.target.value)}
-              placeholder="https://script.google.com/macros/s/AKfycb.../exec"
-            />
-
-            <Input
-              label="自訂防護密鑰 (Family Secret Key)"
-              type="text"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              placeholder="SWISS_ODYSSEY_2027_SECRET"
-            />
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-              <Button type="submit" variant="primary" disabled={isFetchingRemote}>
-                <RefreshCw className={`w-4 h-4 mr-1.5 ${isFetchingRemote ? 'animate-spin' : ''}`} />
-                <span>儲存並測試連線</span>
-              </Button>
-
-              {testResult && (
-                <span className="text-xs font-semibold text-[var(--color-text)]">
-                  {testResult}
-                </span>
-              )}
-            </div>
-
-            {/* 佇列診斷與清理 */}
-            <div className="border-t border-[var(--color-border)] pt-4 mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="text-xs text-[var(--color-text-muted)]">
-                <span>若同步指示燈卡在待同步狀態，可點擊重設本地排隊佇列：</span>
+        <div className="space-y-6">
+          {/* 1. 一鍵全量發布至 Google 試算表 */}
+          <Card className="p-5 sm:p-6 space-y-4 border-l-4 border-l-[var(--color-primary)]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3">
+              <div>
+                <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+                  <Cloud className="w-5 h-5 text-[var(--color-primary)]" />
+                  <span>發布目前旅程至 Google 試算表</span>
+                </h3>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                  將目前選定的「<strong className="text-[var(--color-text)]">{activeTrip?.name || '當前行程'}</strong>」全部天數日程、住宿、交通預訂與清單一鍵完整寫入雲端試算表。
+                </p>
               </div>
-              <Button type="button" variant="outline" onClick={handleClearQueue}>
-                清空待同步佇列
+
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handlePushTrip}
+                disabled={isPushing || !gasUrl.trim()}
+                className="shrink-0 font-medium"
+              >
+                <RefreshCw className={`w-4 h-4 mr-1.5 ${isPushing ? 'animate-spin' : ''}`} />
+                <span>{isPushing ? '正在發布中...' : '🚀 一鍵發布此旅程至雲端'}</span>
               </Button>
+            </div>
+
+            {/* 發布結果通知 */}
+            {pushResult && (
+              <div
+                className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 ${
+                  pushResult.success
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
+                    : 'bg-red-500/10 border-red-500/30 text-red-800 dark:text-red-300'
+                }`}
+              >
+                {pushResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                ) : (
+                  <Trash2 className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                )}
+                <div className="space-y-1">
+                  <p className="font-semibold">{pushResult.message}</p>
+                  {pushResult.stats && (
+                    <p className="text-[11px] opacity-90">
+                      寫入統計：{pushResult.stats.days ?? 0} 天行程、{pushResult.stats.accommodations ?? 0} 筆住宿、
+                      {pushResult.stats.transports ?? 0} 筆交通預訂、{pushResult.stats.checklist ?? 0} 項檢查清單
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-[var(--color-bg-subtle)] p-3.5 rounded-xl text-xs space-y-2 border border-[var(--color-border)]">
+              <div className="font-semibold text-[var(--color-text)] flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span>為什麼之前建立/AI 匯入新行程後試算表是空白的？</span>
+              </div>
+              <p className="text-[var(--color-text-muted)] leading-relaxed">
+                App 為了極致流暢與支援離線使用，AI 匯入或新建行程時會先完整保存在瀏覽器本機儲存區；底部顯示的「已連線」代表已綁定 Apps Script 網址且無離線暫存堆疊。點擊上方的<strong>【一鍵發布此旅程至雲端】</strong>，即會一次性將整份行程、住宿基地、交通班次與行前清單寫入 Google 試算表的分頁，讓所有成員開啟試算表或各自 App 時都能同步檢視！
+              </p>
             </div>
           </Card>
-        </form>
+
+          {/* 2. GAS 連線設定 */}
+          <form onSubmit={handleSaveGasConfig} className="space-y-4">
+            <Card className="p-5 sm:p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+                <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+                  <Cloud className="w-4 h-4 text-sky-500" />
+                  <span>Google Sheets 試算表資料庫綁定</span>
+                </h3>
+
+                <a
+                  href="https://github.com/hippoking1/Travel_Manager_App/blob/main/google-apps-script/SETUP.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-sky-600 dark:text-sky-400 hover:underline inline-flex items-center gap-1"
+                >
+                  <span>部署圖文教學</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+
+              <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
+                將部署完成的 Google Apps Script (GAS) 網頁應用程式 URL 填入下方，即可與家人即時記帳、打勾行李與同步備忘。
+              </p>
+
+              <Input
+                label="Apps Script Web App URL"
+                type="url"
+                value={gasUrl}
+                onChange={(e) => setGasUrl(e.target.value)}
+                placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+              />
+
+              <Input
+                label="自訂防護密鑰 (Family Secret Key)"
+                type="text"
+                value={secret}
+                onChange={(e) => setSecret(e.target.value)}
+                placeholder="SWISS_ODYSSEY_2027_SECRET"
+              />
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                <Button type="submit" variant="primary" disabled={isFetchingRemote}>
+                  <RefreshCw className={`w-4 h-4 mr-1.5 ${isFetchingRemote ? 'animate-spin' : ''}`} />
+                  <span>儲存設定並從試算表讀取</span>
+                </Button>
+
+                {testResult && (
+                  <span className="text-xs font-semibold text-[var(--color-text)]">
+                    {testResult}
+                  </span>
+                )}
+              </div>
+
+              {/* 佇列診斷與清理 */}
+              <div className="border-t border-[var(--color-border)] pt-4 mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="text-xs text-[var(--color-text-muted)]">
+                  <span>若同步指示燈卡在待同步狀態，可點擊重設本地排隊佇列：</span>
+                </div>
+                <Button type="button" variant="outline" onClick={handleClearQueue}>
+                  清空待同步佇列
+                </Button>
+              </div>
+            </Card>
+          </form>
+        </div>
       )}
 
       {/* Tab 6: 旅程計畫列表 */}

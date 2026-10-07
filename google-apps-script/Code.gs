@@ -235,6 +235,176 @@ function doPost(e) {
       return jsonResponse({ success: true, action: "DELETE", note: "ID 已不存在" });
     }
 
+    // 4. 整份旅程原子化全量同步 (BATCH_SYNC_TRIP，一次性將行程、住宿、交通、清單寫入試算表)
+    if (action === "BATCH_SYNC_TRIP") {
+      var tripData = payload.tripData || payload;
+      var currentTripId = tripId || tripData.id || "trip_main";
+      var stats = { itinerary: 0, accommodations: 0, transports: 0, checklist: 0, expenses: 0, config: 0 };
+
+      // 輔助函式：全量替換或追加某分頁中屬於 currentTripId 的資料列
+      function syncSheetRows(targetSheetName, rawRows, rowMapper) {
+        var ws = getOrCreateSheet(ss, targetSheetName);
+        var defHeaders = DEFAULT_HEADERS[targetSheetName] || [];
+        ensureHeaders(ws, targetSheetName);
+
+        // 先刪除該分頁中屬於 currentTripId 的舊資料
+        var lastR = ws.getLastRow();
+        if (lastR >= 2) {
+          var headerRow = ws.getRange(1, 1, 1, ws.getLastColumn()).getValues()[0];
+          var tColIdx = headerRow.indexOf("tripId");
+          if (tColIdx > -1) {
+            var allVals = ws.getRange(2, tColIdx + 1, lastR - 1, 1).getValues();
+            // 從後往前刪除，避免索引偏移
+            for (var ri = allVals.length - 1; ri >= 0; ri--) {
+              if (String(allVals[ri][0]) === String(currentTripId)) {
+                ws.deleteRow(ri + 2);
+              }
+            }
+          }
+        }
+
+        if (!rawRows || rawRows.length === 0) return 0;
+
+        var headerRowAfter = ws.getRange(1, 1, 1, ws.getLastColumn()).getValues()[0];
+        var batchValues = rawRows.map(function (item) {
+          var mapped = rowMapper(item);
+          mapped.tripId = currentTripId;
+          return headerRowAfter.map(function (col) {
+            return mapped[col] !== undefined ? mapped[col] : "";
+          });
+        });
+
+        if (batchValues.length > 0) {
+          var startRow = ws.getLastRow() + 1;
+          ws.getRange(startRow, 1, batchValues.length, headerRowAfter.length).setValues(batchValues);
+        }
+        return batchValues.length;
+      }
+
+      // A. 同步 TripConfig
+      var configItems = [];
+      if (tripData.config) {
+        if (tripData.config.tripName) configItems.push({ key: "tripName", value: tripData.config.tripName });
+        if (tripData.config.startDate) configItems.push({ key: "startDate", value: tripData.config.startDate });
+        if (tripData.config.totalDays) configItems.push({ key: "totalDays", value: tripData.config.totalDays });
+        if (tripData.destination) configItems.push({ key: "destination", value: tripData.destination });
+        if (tripData.config.currencies && tripData.config.currencies.primary) {
+          configItems.push({ key: "primaryCurrency", value: tripData.config.currencies.primary });
+        }
+      }
+      stats.config = syncSheetRows("TripConfig", configItems, function (c) {
+        return { key: c.key, value: String(c.value), updatedAt: new Date().toISOString() };
+      });
+
+      // B. 同步 Itinerary (日程與時段)
+      if (Array.isArray(tripData.itinerary)) {
+        stats.itinerary = syncSheetRows("Itinerary", tripData.itinerary, function (day) {
+          return {
+            dayId: day.id || ("day_" + day.day),
+            day: day.day,
+            baseId: day.baseId || "",
+            title: day.title || "",
+            subtitle: day.subtitle || "",
+            highlights: Array.isArray(day.highlights) ? day.highlights.join("; ") : "",
+            timeBlocksJson: JSON.stringify(day.timeBlocks || []),
+            foodNotesJson: JSON.stringify(day.foodNotes || []),
+            updatedAt: new Date().toISOString()
+          };
+        });
+      }
+
+      // C. 同步 Accommodations (住宿預訂)
+      if (Array.isArray(tripData.accommodations)) {
+        stats.accommodations = syncSheetRows("Accommodations", tripData.accommodations, function (acc) {
+          return {
+            id: acc.id,
+            baseId: acc.baseId,
+            baseNameZh: acc.baseNameZh || "",
+            hotelName: acc.hotelName || "",
+            roomType: acc.roomType || "",
+            checkInDate: acc.checkInDate || "",
+            checkOutDate: acc.checkOutDate || "",
+            nights: acc.nights || 1,
+            bookingPlatform: acc.bookingPlatform || "",
+            confirmationCode: acc.confirmationCode || "",
+            totalPrice: acc.totalPrice || 0,
+            currency: acc.currency || "TWD",
+            paymentStatus: acc.paymentStatus || "",
+            paymentStatusLabel: acc.paymentStatusLabel || "",
+            address: acc.address || "",
+            checkInTimeNotice: acc.checkInTimeNotice || "",
+            keyPickupNotice: acc.keyPickupNotice || "",
+            garbageRulesNotice: acc.garbageRulesNotice || "",
+            kitchenRulesNotice: acc.kitchenRulesNotice || "",
+            notes: acc.notes || ""
+          };
+        });
+      }
+
+      // D. 同步 Transports (交通預訂)
+      if (Array.isArray(tripData.transports)) {
+        stats.transports = syncSheetRows("Transports", tripData.transports, function (tra) {
+          return {
+            id: tra.id,
+            category: tra.category || "",
+            categoryLabel: tra.categoryLabel || "",
+            title: tra.title || "",
+            routeFrom: tra.routeFrom || "",
+            routeTo: tra.routeTo || "",
+            departureTime: tra.departureTime || "",
+            operatorNumber: tra.operatorNumber || "",
+            bookingReference: tra.bookingReference || "",
+            seatsInfo: tra.seatsInfo || "",
+            ticketType: tra.ticketType || "",
+            platformNotice: tra.platformNotice || "",
+            luggageNotice: tra.luggageNotice || "",
+            boardingNotice: tra.boardingNotice || "",
+            notes: tra.notes || ""
+          };
+        });
+      }
+
+      // E. 同步 Checklist (行前清單)
+      if (Array.isArray(tripData.checklist)) {
+        stats.checklist = syncSheetRows("Checklist", tripData.checklist, function (chk) {
+          return {
+            id: chk.id,
+            category: chk.category || "",
+            categoryLabel: chk.categoryLabel || "",
+            item: chk.item || "",
+            checked: chk.checked ? "TRUE" : "FALSE",
+            priority: chk.priority || "medium",
+            assignedTo: chk.assignedTo || "",
+            altitudeRange: chk.altitudeRange || ""
+          };
+        });
+      }
+
+      // F. 同步 Expenses (花費)
+      if (Array.isArray(tripData.expenses) && tripData.expenses.length > 0) {
+        stats.expenses = syncSheetRows("Expenses", tripData.expenses, function (exp) {
+          return {
+            id: exp.id,
+            timestamp: exp.timestamp || new Date().toISOString(),
+            dayNumber: exp.dayNumber || "",
+            category: exp.category || "other",
+            amount: exp.amount || 0,
+            currency: exp.currency || "TWD",
+            note: exp.note || "",
+            paidBy: exp.paidBy || ""
+          };
+        });
+      }
+
+      return jsonResponse({
+        success: true,
+        action: "BATCH_SYNC_TRIP",
+        tripId: currentTripId,
+        stats: stats,
+        message: "全量行程與預訂資料已成功發布至 Google 試算表！"
+      });
+    }
+
     return jsonResponse({ success: false, error: "未知的 action: " + action }, 400);
   } catch (err) {
     return jsonResponse({ success: false, error: err.toString() }, 500);

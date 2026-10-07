@@ -21,7 +21,7 @@ import { DEFAULT_CHECKLIST } from '../data/clothing-checklist';
 import { DEMO_ACCOMMODATIONS, DEMO_TRANSPORTS } from '../data/demo-bookings';
 import { DEFAULT_CURRENCY_CONFIG } from '../utils/currency';
 import { syncManager } from '../services/syncManager';
-import { fetchFromSheet, isGasConfigured } from '../services/sheetApi';
+import { fetchFromSheet, mutateSheet, isGasConfigured } from '../services/sheetApi';
 import { 
   moveBlock as moveBlockPure, 
   reorderDays as reorderDaysPure, 
@@ -111,6 +111,7 @@ export interface TripStoreState {
   deleteChecklistItem: (id: string) => void;
   toggleBookmark: (locationId: string) => void;
   fetchLatestFromSheets: () => Promise<boolean>;
+  pushActiveTripToSheets: () => Promise<{ success: boolean; message?: string; stats?: any; error?: string }>;
 }
 
 const INITIAL_CONFIG: TripConfig = {
@@ -498,6 +499,14 @@ export const useTripStore = create<TripStoreState>()(
           transports: normalized.transports,
           bookmarks: normalized.bookmarks,
         }));
+
+        // 若已綁定 Google Sheets，立即在背景將新旅程發布至雲端試算表
+        if (isGasConfigured()) {
+          setTimeout(() => {
+            get().pushActiveTripToSheets();
+          }, 300);
+        }
+
         return normalized.id;
       },
 
@@ -542,6 +551,13 @@ export const useTripStore = create<TripStoreState>()(
             bookmarks: normalized.bookmarks,
           };
         });
+
+        // 若已綁定 Google Sheets，立即在背景發布更新至雲端試算表
+        if (isGasConfigured()) {
+          setTimeout(() => {
+            get().pushActiveTripToSheets();
+          }, 300);
+        }
 
         return result;
       },
@@ -1240,6 +1256,62 @@ export const useTripStore = create<TripStoreState>()(
           set({ isFetchingRemote: false });
         }
         return false;
+      },
+
+      pushActiveTripToSheets: async () => {
+        if (!isGasConfigured()) {
+          return {
+            success: false,
+            error: '尚未設定 Google Apps Script Web App URL，請先至【設定 ➔ 雲端同步】填寫部署網址。',
+          };
+        }
+
+        set({ isFetchingRemote: true });
+
+        try {
+          const state = get();
+          const activeTrip = state.trips.find((t) => t.id === state.activeTripId) || {
+            id: state.activeTripId,
+            name: state.config.tripName,
+            destination: '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            config: state.config,
+            itinerary: state.itinerary,
+            backlog: state.backlog,
+            modules: state.modules,
+            locations: state.locations,
+            expenses: state.expenses,
+            checklist: state.checklist,
+            accommodations: state.accommodations,
+            transports: state.transports,
+            bookmarks: state.bookmarks,
+          };
+
+          // 一次性將整份旅程打包發送給 Google Apps Script (BATCH_SYNC_TRIP)
+          const res = await mutateSheet('All', 'BATCH_SYNC_TRIP', { tripData: activeTrip }, activeTrip.id);
+
+          if (res.success) {
+            const nowIso = new Date().toISOString();
+            localStorage.setItem('travel_last_synced_time', nowIso);
+            // 觸發 syncManager 狀態更新
+            syncManager.flushQueue();
+
+            return {
+              success: true,
+              message: res.message || '已成功將整份行程、住宿、交通與清單發布至 Google 試算表！',
+              stats: res.stats,
+            };
+          } else {
+            throw new Error(res.error || 'Google 試算表寫入失敗');
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('全量推播至 Google Sheets 失敗:', msg);
+          return { success: false, error: msg };
+        } finally {
+          set({ isFetchingRemote: false });
+        }
       },
     }),
     {

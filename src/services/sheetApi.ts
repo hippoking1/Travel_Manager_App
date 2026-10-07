@@ -86,10 +86,10 @@ export async function fetchFromSheet<T = unknown>(
  */
 export async function mutateSheet(
   sheet: string,
-  action: 'APPEND' | 'UPDATE' | 'DELETE' | 'BATCH',
+  action: 'APPEND' | 'UPDATE' | 'DELETE' | 'BATCH' | 'BATCH_SYNC_TRIP',
   payload: Record<string, unknown>,
   tripId?: string
-): Promise<{ success: boolean; error?: string; id?: string }> {
+): Promise<{ success: boolean; error?: string; id?: string; stats?: any; message?: string }> {
   const url = getGasUrl();
   const secret = getFamilySecret();
 
