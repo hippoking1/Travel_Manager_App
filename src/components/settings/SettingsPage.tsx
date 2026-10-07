@@ -17,6 +17,7 @@ import {
   Sparkles,
   Pencil,
   RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 import { useTripStore } from '../../stores/tripStore';
 import { useActiveTrip } from '../../stores/selectors';
@@ -829,15 +830,23 @@ export const SettingsPage: React.FC = () => {
                 {pushResult.success ? (
                   <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                 ) : (
-                  <Trash2 className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                 )}
-                <div className="space-y-1">
+                <div className="space-y-1.5 flex-1">
                   <p className="font-semibold">{pushResult.message}</p>
                   {pushResult.stats && (
                     <p className="text-[11px] opacity-90">
                       寫入統計：{pushResult.stats.days ?? 0} 天行程、{pushResult.stats.accommodations ?? 0} 筆住宿、
                       {pushResult.stats.transports ?? 0} 筆交通預訂、{pushResult.stats.checklist ?? 0} 項檢查清單
                     </p>
+                  )}
+                  {!pushResult.success && (
+                    <div className="text-[11px] pt-1 text-red-700 dark:text-red-300/90 space-y-0.5 border-t border-red-500/20 mt-1">
+                      <p className="font-semibold">💡 常見解決步驟：</p>
+                      <p>1. <strong>部署為新版本</strong>：Apps Script 部署作業請務必建立「新版本」部署（切勿僅儲存未部署）。</p>
+                      <p>2. <strong>存取權限設為「所有人」</strong>：Apps Script 部署設定中的「誰可以存取」必須設定為「所有人 (Anyone)」。</p>
+                      <p>3. <strong>更新 Web App URL</strong>：若重新建立了新的部署作業，請確認下方輸入框貼上的是最新的 Web App URL。</p>
+                    </div>
                   )}
                 </div>
               </div>

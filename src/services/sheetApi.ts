@@ -48,8 +48,9 @@ export async function fetchFromSheet<T = unknown>(
     return { success: false, error: '尚未設定 Google Apps Script Web App URL' };
   }
 
+  const timeoutMs = 30000;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000); // 12秒超時保護
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const params = new URLSearchParams();
@@ -67,14 +68,28 @@ export async function fetchFromSheet<T = unknown>(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error(`HTTP 錯誤碼: ${response.status} (${response.statusText})`);
+      throw new Error(`Google 試算表伺服器回傳 HTTP ${response.status} (${response.statusText})`);
     }
 
-    const json = await response.json();
-    return json;
+    const rawText = await response.text();
+    try {
+      const json = JSON.parse(rawText);
+      return json;
+    } catch {
+      if (rawText.includes('<html') || rawText.includes('<!DOCTYPE') || rawText.includes('找不到網頁')) {
+        return {
+          success: false,
+          error: 'Google Apps Script 回傳了網頁錯誤頁面。請確認 Web App URL 是否有效，且存取權限已設為「所有人 (Anyone)」。',
+        };
+      }
+      return { success: false, error: `回傳格式非 JSON: ${rawText.slice(0, 100)}` };
+    }
   } catch (err: unknown) {
     clearTimeout(timeoutId);
-    const msg = err instanceof Error ? err.message : String(err);
+    let msg = err instanceof Error ? err.message : String(err);
+    if ((err instanceof DOMException && err.name === 'AbortError') || msg.toLowerCase().includes('aborted')) {
+      msg = '連線逾時（超過 30 秒）：Google 試算表讀取較慢，請檢查網路連線或稍後再試。';
+    }
     return { success: false, error: msg };
   }
 }
@@ -98,8 +113,10 @@ export async function mutateSheet(
     return { success: true };
   }
 
+  // BATCH_SYNC_TRIP 涉及建立多個工作表與批量寫入，提供 60 秒充裕超時保護
+  const timeoutMs = action === 'BATCH_SYNC_TRIP' ? 60000 : 30000;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超時保護
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const bodyData = JSON.stringify({
@@ -122,11 +139,29 @@ export async function mutateSheet(
 
     clearTimeout(timeoutId);
 
-    const json = await response.json();
-    return json;
+    if (!response.ok) {
+      throw new Error(`Google 試算表伺服器回傳 HTTP ${response.status} (${response.statusText})`);
+    }
+
+    const rawText = await response.text();
+    try {
+      const json = JSON.parse(rawText);
+      return json;
+    } catch {
+      if (rawText.includes('<html') || rawText.includes('<!DOCTYPE') || rawText.includes('找不到網頁')) {
+        return {
+          success: false,
+          error: 'Google Apps Script 回傳了網頁錯誤頁面。請確認 Web App URL 是否有效，且存取權限已設為「所有人 (Anyone)」。',
+        };
+      }
+      return { success: false, error: `回傳格式非 JSON: ${rawText.slice(0, 100)}` };
+    }
   } catch (err: unknown) {
     clearTimeout(timeoutId);
-    const msg = err instanceof Error ? err.message : String(err);
+    let msg = err instanceof Error ? err.message : String(err);
+    if ((err instanceof DOMException && err.name === 'AbortError') || msg.toLowerCase().includes('aborted')) {
+      msg = `連線逾時（超過 ${Math.round(timeoutMs / 1000)} 秒）：Google 試算表處理較慢或初次建表耗時較長，請稍候重試。`;
+    }
     return { success: false, error: msg };
   }
 }

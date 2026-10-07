@@ -107,7 +107,7 @@ function doGet(e) {
  */
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(15000)) {
+  if (!lock.tryLock(30000)) {
     return jsonResponse({ success: false, error: "系統忙碌中，請稍候重試" }, 503);
   }
 
@@ -241,44 +241,53 @@ function doPost(e) {
       var currentTripId = tripId || tripData.id || "trip_main";
       var stats = { itinerary: 0, accommodations: 0, transports: 0, checklist: 0, expenses: 0, config: 0 };
 
-      // 輔助函式：全量替換或追加某分頁中屬於 currentTripId 的資料列
+      // 輔助函式：全量替換某分頁中屬於 currentTripId 的資料列 (記憶體過濾 + 單次批次寫入，極速避免超時)
       function syncSheetRows(targetSheetName, rawRows, rowMapper) {
         var ws = getOrCreateSheet(ss, targetSheetName);
-        var defHeaders = DEFAULT_HEADERS[targetSheetName] || [];
-        ensureHeaders(ws, targetSheetName);
-
-        // 先刪除該分頁中屬於 currentTripId 的舊資料
+        var headerRow = ensureHeaders(ws, targetSheetName);
         var lastR = ws.getLastRow();
-        if (lastR >= 2) {
-          var headerRow = ws.getRange(1, 1, 1, ws.getLastColumn()).getValues()[0];
-          var tColIdx = headerRow.indexOf("tripId");
+        var lastC = ws.getLastColumn();
+        if (lastC === 0) lastC = headerRow.length;
+
+        var tColIdx = headerRow.indexOf("tripId");
+
+        // 1. 在記憶體中篩選保留其他旅程的資料 (避免逐列 deleteRow 造成超時)
+        var retainedRows = [];
+        if (lastR >= 2 && lastC >= 1) {
+          var existingData = ws.getRange(2, 1, lastR - 1, lastC).getValues();
           if (tColIdx > -1) {
-            var allVals = ws.getRange(2, tColIdx + 1, lastR - 1, 1).getValues();
-            // 從後往前刪除，避免索引偏移
-            for (var ri = allVals.length - 1; ri >= 0; ri--) {
-              if (String(allVals[ri][0]) === String(currentTripId)) {
-                ws.deleteRow(ri + 2);
-              }
-            }
+            retainedRows = existingData.filter(function (row) {
+              return String(row[tColIdx]) !== String(currentTripId);
+            });
+          } else {
+            retainedRows = existingData;
           }
         }
 
-        if (!rawRows || rawRows.length === 0) return 0;
-
-        var headerRowAfter = ws.getRange(1, 1, 1, ws.getLastColumn()).getValues()[0];
-        var batchValues = rawRows.map(function (item) {
-          var mapped = rowMapper(item);
-          mapped.tripId = currentTripId;
-          return headerRowAfter.map(function (col) {
-            return mapped[col] !== undefined ? mapped[col] : "";
+        // 2. 映射本次新資料為二維陣列
+        var newRows = [];
+        if (rawRows && rawRows.length > 0) {
+          newRows = rawRows.map(function (item) {
+            var mapped = rowMapper(item);
+            mapped.tripId = currentTripId;
+            return headerRow.map(function (col) {
+              return mapped[col] !== undefined ? mapped[col] : "";
+            });
           });
-        });
-
-        if (batchValues.length > 0) {
-          var startRow = ws.getLastRow() + 1;
-          ws.getRange(startRow, 1, batchValues.length, headerRowAfter.length).setValues(batchValues);
         }
-        return batchValues.length;
+
+        // 3. 一次性清空第 2 列以後舊資料 (僅 1 次 RPC)
+        if (lastR >= 2 && lastC >= 1) {
+          ws.getRange(2, 1, lastR - 1, lastC).clearContent();
+        }
+
+        // 4. 一次性整批寫入合併後的資料列 (僅 1 次 RPC)
+        var combinedRows = retainedRows.concat(newRows);
+        if (combinedRows.length > 0) {
+          ws.getRange(2, 1, combinedRows.length, headerRow.length).setValues(combinedRows);
+        }
+
+        return newRows.length;
       }
 
       // A. 同步 TripConfig
@@ -395,6 +404,8 @@ function doPost(e) {
           };
         });
       }
+
+      SpreadsheetApp.flush();
 
       return jsonResponse({
         success: true,
