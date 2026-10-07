@@ -6,6 +6,8 @@ import type {
   MapLocation, 
   ExpenseRecord, 
   ChecklistItem,
+  ChecklistCategory,
+  FoodNote,
   TimeBlock,
   AccommodationBooking,
   TransportBooking,
@@ -31,9 +33,13 @@ import {
   formatTimeSpan
 } from '../lib/itinerary';
 import { normalizeTripPlan, normalizeDayItinerary, normalizeTimeBlock, migrateToV4 } from './migrations';
-import type { TripImportV1, MergeResult } from '../lib/tripImport';
-import { importToNewTripPlan, mergeImportToExistingPlan } from '../lib/tripImport';
-import { inferCoordinates } from '../lib/geo';
+import { 
+  importToNewTripPlan, 
+  mergeImportToExistingPlan, 
+  type TripImportV1, 
+  type MergeResult 
+} from '../lib/tripImport';
+import { inferCoordinates, extractAllTripLocations } from '../lib/geo';
 
 export interface TripStoreState {
   // 多場旅遊計畫管理 (Multi-Trip Management)
@@ -1191,65 +1197,294 @@ export const useTripStore = create<TripStoreState>()(
         set({ isFetchingRemote: true });
 
         try {
-          const res = await fetchFromSheet<Record<string, unknown[]>>(undefined, get().activeTripId);
-          if (res.success && res.data) {
-            const remoteData = res.data;
-            set((state) =>
-              mutateActive(state, (active) => {
-                const nextTrip: Partial<TripPlan> = {};
+          // 不傳入 tripId，拉取雲端全部工作表資料以實現跨裝置旅程發現與全量同步
+          const res = await fetchFromSheet<Record<string, any[]>>();
+          if (!res.success || !res.data) {
+            console.warn('拉取 Google Sheets 資料失敗或為空:', res.error);
+            return false;
+          }
 
-                // 1. 同步 Expenses
-                if (Array.isArray(remoteData.Expenses) && remoteData.Expenses.length > 0) {
-                  nextTrip.expenses = remoteData.Expenses.map((row: any) => ({
-                    id: String(row.id || Math.random()),
-                    timestamp: String(row.timestamp || new Date().toISOString()),
-                    dayNumber: row.dayNumber ? Number(row.dayNumber) : undefined,
-                    category: row.category || 'other',
-                    amount: Number(row.amount) || 0,
-                    currency: row.currency || active.config.currencies.primary || 'CHF',
-                    note: String(row.note || ''),
-                    paidBy: row.paidBy ? String(row.paidBy) : undefined,
-                  }));
-                }
+          const remoteData = res.data;
+          const allConfigs = Array.isArray(remoteData.TripConfig) ? remoteData.TripConfig : [];
+          const allItinerary = Array.isArray(remoteData.Itinerary) ? remoteData.Itinerary : [];
+          const allAccommodations = Array.isArray(remoteData.Accommodations) ? remoteData.Accommodations : [];
+          const allTransports = Array.isArray(remoteData.Transports) ? remoteData.Transports : [];
+          const allChecklist = Array.isArray(remoteData.Checklist) ? remoteData.Checklist : [];
+          const allExpenses = Array.isArray(remoteData.Expenses) ? remoteData.Expenses : [];
+          const allBookmarks = Array.isArray(remoteData.Bookmarks) ? remoteData.Bookmarks : [];
 
-                // 2. 同步 Checklist
-                if (Array.isArray(remoteData.Checklist) && remoteData.Checklist.length > 0) {
-                  nextTrip.checklist = remoteData.Checklist.map((row: any) => ({
-                    id: String(row.id),
-                    category: row.category || 'clothing',
-                    categoryLabel: row.categoryLabel || '行前清單',
-                    item: String(row.item || ''),
-                    checked: row.checked === true || row.checked === 'TRUE' || row.checked === 'true',
-                    priority: row.priority || 'medium',
-                    assignedTo: row.assignedTo ? String(row.assignedTo) : undefined,
-                    altitudeRange: row.altitudeRange ? String(row.altitudeRange) : undefined,
-                  }));
-                }
+          // 收集雲端試算表中出現的所有 tripId
+          const remoteTripIds = Array.from(
+            new Set(
+              [
+                ...allConfigs.map((r: any) => r.tripId),
+                ...allItinerary.map((r: any) => r.tripId),
+                ...allAccommodations.map((r: any) => r.tripId),
+                ...allTransports.map((r: any) => r.tripId),
+                ...allChecklist.map((r: any) => r.tripId),
+                ...allExpenses.map((r: any) => r.tripId),
+              ].filter(Boolean)
+            )
+          );
 
-                // 3. 同步 TripConfig
-                if (Array.isArray(remoteData.TripConfig)) {
-                  const configMap: Record<string, any> = {};
-                  remoteData.TripConfig.forEach((item: any) => {
-                    if (item.key) configMap[item.key] = item.value;
-                  });
-                  const updatedConfig = { ...active.config };
-                  if (configMap.startDate) {
-                    updatedConfig.startDate = String(configMap.startDate);
-                  }
-                  if (configMap.totalDays) {
-                    const days = parseInt(String(configMap.totalDays), 10);
-                    if (!isNaN(days) && days > 0) {
-                      updatedConfig.totalDays = days;
-                    }
-                  }
-                  nextTrip.config = updatedConfig;
-                }
+          // 判斷雲端是否有任何資料
+          const hasAnyData =
+            allConfigs.length > 0 ||
+            allItinerary.length > 0 ||
+            allAccommodations.length > 0 ||
+            allTransports.length > 0 ||
+            allChecklist.length > 0 ||
+            allExpenses.length > 0;
 
-                return nextTrip;
-              })
-            );
+          if (!hasAnyData) {
+            console.log('Google 試算表目前為空，無資料可同步。');
             return true;
           }
+
+          set((state) => {
+            const currentActiveId = state.activeTripId;
+            let targetTripId = currentActiveId;
+
+            // 若當前裝置的 activeTripId 在雲端找不到，但雲端有別的旅程（例如手機讀取電腦端 AI 匯入的旅程）
+            if (remoteTripIds.length > 0 && !remoteTripIds.includes(currentActiveId)) {
+              // 優先切換至雲端的第一個旅程
+              targetTripId = remoteTripIds[0];
+            }
+
+            // 輔助函式：針對單一 tripId 重構完整 TripPlan
+            function buildTripPlanFromRemote(tId: string, baseTrip?: TripPlan): TripPlan {
+              const isMatch = (r: any) => !r.tripId || String(r.tripId) === String(tId);
+
+              const tripConfigs = allConfigs.filter(isMatch);
+              const tripItinerary = allItinerary.filter(isMatch);
+              const tripAccommodations = allAccommodations.filter(isMatch);
+              const tripTransports = allTransports.filter(isMatch);
+              const tripChecklist = allChecklist.filter(isMatch);
+              const tripExpenses = allExpenses.filter(isMatch);
+              const tripBookmarks = allBookmarks.filter(isMatch);
+
+              const configMap: Record<string, any> = {};
+              tripConfigs.forEach((c: any) => {
+                if (c.key) configMap[c.key] = c.value;
+              });
+
+              const basePlan = baseTrip || state.trips.find((t) => t.id === tId) || INITIAL_SWISS_TRIP;
+              const name = configMap.tripName || basePlan.name || '雲端同步旅程';
+              const destination = configMap.destination || basePlan.destination || '';
+              const startDate = configMap.startDate || basePlan.config?.startDate || null;
+              const primaryCurrency = configMap.primaryCurrency || basePlan.config?.currencies?.primary || 'TWD';
+
+              // 解析 Itinerary (日程景點)
+              let itinerary: DayItinerary[] = basePlan.itinerary || [];
+              if (tripItinerary.length > 0) {
+                itinerary = tripItinerary.map((row: any) => {
+                  let timeBlocks: TimeBlock[] = [];
+                  try {
+                    if (typeof row.timeBlocksJson === 'string' && row.timeBlocksJson.trim()) {
+                      timeBlocks = JSON.parse(row.timeBlocksJson);
+                    } else if (Array.isArray(row.timeBlocks)) {
+                      timeBlocks = row.timeBlocks;
+                    }
+                  } catch (e) {
+                    console.warn('解析 timeBlocksJson 失敗:', e);
+                  }
+
+                  let foodNotes: FoodNote[] = [];
+                  try {
+                    let rawFoodNotes: any[] = [];
+                    if (typeof row.foodNotesJson === 'string' && row.foodNotesJson.trim()) {
+                      rawFoodNotes = JSON.parse(row.foodNotesJson);
+                    } else if (Array.isArray(row.foodNotes)) {
+                      rawFoodNotes = row.foodNotes;
+                    }
+                    if (Array.isArray(rawFoodNotes)) {
+                      foodNotes = rawFoodNotes.map((fn: any) => {
+                        if (typeof fn === 'string') {
+                          return {
+                            meal: 'lunch' as const,
+                            mealLabel: '推薦用餐',
+                            suggestion: fn,
+                            type: 'restaurant' as const,
+                          };
+                        }
+                        return fn as FoodNote;
+                      });
+                    }
+                  } catch (e) {
+                    console.warn('解析 foodNotesJson 失敗:', e);
+                  }
+
+                  const highlights = typeof row.highlights === 'string'
+                    ? row.highlights.split(';').map((s: string) => s.trim()).filter(Boolean)
+                    : Array.isArray(row.highlights) ? row.highlights : [];
+
+                  return normalizeDayItinerary({
+                    id: String(row.dayId || `day_${row.day}`),
+                    day: Number(row.day) || 1,
+                    baseId: String(row.baseId || ''),
+                    title: String(row.title || `第 ${row.day} 天`),
+                    subtitle: String(row.subtitle || ''),
+                    highlights,
+                    timeBlocks,
+                    foodNotes,
+                  });
+                }).sort((a, b) => a.day - b.day);
+              }
+
+              // 解析 Accommodations (住宿預訂)
+              let accommodations: AccommodationBooking[] = basePlan.accommodations || [];
+              if (tripAccommodations.length > 0) {
+                accommodations = tripAccommodations.map((acc: any) => ({
+                  id: String(acc.id || `acc_${Date.now()}`),
+                  baseId: String(acc.baseId || ''),
+                  baseNameZh: String(acc.baseNameZh || ''),
+                  hotelName: String(acc.hotelName || ''),
+                  roomType: String(acc.roomType || ''),
+                  checkInDate: String(acc.checkInDate || ''),
+                  checkOutDate: String(acc.checkOutDate || ''),
+                  nights: Number(acc.nights) || 1,
+                  bookingPlatform: String(acc.bookingPlatform || ''),
+                  confirmationCode: String(acc.confirmationCode || ''),
+                  totalPrice: Number(acc.totalPrice) || 0,
+                  currency: String(acc.currency || 'TWD'),
+                  paymentStatus: (acc.paymentStatus || 'confirmed') as any,
+                  paymentStatusLabel: String(acc.paymentStatusLabel || '已確認'),
+                  address: String(acc.address || ''),
+                  checkInTimeNotice: String(acc.checkInTimeNotice || ''),
+                  keyPickupNotice: String(acc.keyPickupNotice || ''),
+                  garbageRulesNotice: String(acc.garbageRulesNotice || ''),
+                  kitchenRulesNotice: String(acc.kitchenRulesNotice || ''),
+                  notes: String(acc.notes || ''),
+                }));
+              }
+
+              // 解析 Transports (交通預訂)
+              let transports: TransportBooking[] = basePlan.transports || [];
+              if (tripTransports.length > 0) {
+                transports = tripTransports.map((tra: any) => ({
+                  id: String(tra.id || `tra_${Date.now()}`),
+                  category: (tra.category || 'scenic_train') as any,
+                  categoryLabel: String(tra.categoryLabel || '交通'),
+                  title: String(tra.title || ''),
+                  routeFrom: String(tra.routeFrom || ''),
+                  routeTo: String(tra.routeTo || ''),
+                  departureTime: String(tra.departureTime || ''),
+                  arrivalTime: tra.arrivalTime ? String(tra.arrivalTime) : undefined,
+                  operatorNumber: String(tra.operatorNumber || ''),
+                  bookingReference: String(tra.bookingReference || ''),
+                  seatsInfo: tra.seatsInfo ? String(tra.seatsInfo) : undefined,
+                  ticketType: String(tra.ticketType || ''),
+                  totalPrice: tra.totalPrice ? Number(tra.totalPrice) : undefined,
+                  currency: tra.currency ? String(tra.currency) : undefined,
+                  platformNotice: String(tra.platformNotice || ''),
+                  luggageNotice: String(tra.luggageNotice || ''),
+                  boardingNotice: String(tra.boardingNotice || ''),
+                  notes: String(tra.notes || ''),
+                }));
+              }
+
+              // 解析 Checklist (清單)
+              let checklist: ChecklistItem[] = basePlan.checklist || [];
+              if (tripChecklist.length > 0) {
+                checklist = tripChecklist.map((chk: any) => ({
+                  id: String(chk.id || `chk_${Date.now()}`),
+                  category: (chk.category as ChecklistCategory) || 'clothing',
+                  categoryLabel: String(chk.categoryLabel || '行前清單'),
+                  item: String(chk.item || ''),
+                  checked: chk.checked === true || chk.checked === 'TRUE' || chk.checked === 'true',
+                  priority: (chk.priority || 'medium') as any,
+                  assignedTo: chk.assignedTo ? String(chk.assignedTo) : undefined,
+                  altitudeRange: chk.altitudeRange ? String(chk.altitudeRange) : undefined,
+                }));
+              }
+
+              // 解析 Expenses (花費)
+              let expenses: ExpenseRecord[] = basePlan.expenses || [];
+              if (tripExpenses.length > 0) {
+                expenses = tripExpenses.map((exp: any) => ({
+                  id: String(exp.id || Math.random()),
+                  timestamp: String(exp.timestamp || new Date().toISOString()),
+                  dayNumber: exp.dayNumber ? Number(exp.dayNumber) : undefined,
+                  category: exp.category || 'other',
+                  amount: Number(exp.amount) || 0,
+                  currency: String(exp.currency || primaryCurrency || 'TWD'),
+                  note: String(exp.note || ''),
+                  paidBy: exp.paidBy ? String(exp.paidBy) : undefined,
+                }));
+              }
+
+              // 解析 Bookmarks
+              const bookmarks = tripBookmarks.map((b: any) => String(b.locationId || b.id)).filter(Boolean);
+
+              const totalDays = configMap.totalDays
+                ? Number(configMap.totalDays)
+                : itinerary.length > 0
+                ? itinerary.length
+                : basePlan.config?.totalDays || 1;
+
+              const plan = normalizeTripPlan({
+                id: tId,
+                name,
+                destination,
+                coverEmoji: basePlan.coverEmoji || (destination.includes('瑞士') ? '🇨🇭' : '✈️'),
+                createdAt: basePlan.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                config: {
+                  ...basePlan.config,
+                  tripName: name,
+                  startDate,
+                  totalDays,
+                  currencies: {
+                    ...basePlan.config?.currencies,
+                    primary: primaryCurrency,
+                  },
+                },
+                itinerary,
+                accommodations,
+                transports,
+                checklist,
+                expenses,
+                bookmarks: bookmarks.length > 0 ? bookmarks : basePlan.bookmarks || [],
+              });
+
+              // 地圖點位自動提取
+              plan.locations = extractAllTripLocations(plan);
+              return plan;
+            }
+
+            // 更新或追加所有雲端識別出的 trips
+            const tripIdsToSync = remoteTripIds.length > 0 ? remoteTripIds : [targetTripId];
+            let nextTrips = [...state.trips];
+
+            tripIdsToSync.forEach((tId) => {
+              const existingIdx = nextTrips.findIndex((t) => t.id === tId);
+              const built = buildTripPlanFromRemote(tId, existingIdx !== -1 ? nextTrips[existingIdx] : undefined);
+              if (existingIdx !== -1) {
+                nextTrips[existingIdx] = built;
+              } else {
+                nextTrips.push(built);
+              }
+            });
+
+            const activePlan = nextTrips.find((t) => t.id === targetTripId) || nextTrips[0];
+
+            return {
+              trips: nextTrips,
+              activeTripId: activePlan.id,
+              config: activePlan.config,
+              itinerary: activePlan.itinerary,
+              backlog: activePlan.backlog || [],
+              modules: activePlan.modules || [],
+              locations: activePlan.locations || [],
+              expenses: activePlan.expenses,
+              checklist: activePlan.checklist,
+              accommodations: activePlan.accommodations,
+              transports: activePlan.transports,
+              bookmarks: activePlan.bookmarks || [],
+            };
+          });
+
+          return true;
         } catch (err) {
           console.error('拉取 Google Sheets 資料失敗:', err);
         } finally {
