@@ -66,6 +66,22 @@ const TILE_LAYERS: Record<
   },
 };
 
+/**
+ * 取得點位之 Google Maps 導航/路程規劃連結
+ */
+function getGoogleMapsUrl(loc: MapLocation): string {
+  if (loc.googleMapsUrl && loc.googleMapsUrl.trim().length > 0) {
+    return loc.googleMapsUrl.trim();
+  }
+  if (loc.coordinates && loc.coordinates[0] !== 0 && loc.coordinates[1] !== 0) {
+    return `https://www.google.com/maps/search/?api=1&query=${loc.coordinates[0]},${loc.coordinates[1]}`;
+  }
+  if (loc.address && loc.address.trim().length > 0) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc.address.trim())}`;
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc.nameZh || loc.name)}`;
+}
+
 // 子元件：個別點位 Marker，支援選中時自動彈出 Popup 與聚焦高亮
 const LocationMarker: React.FC<{
   loc: MapLocation;
@@ -126,7 +142,7 @@ const LocationMarker: React.FC<{
             </div>
           )}
 
-          <div className="pt-2 border-t border-stone-200 dark:border-stone-700 flex items-center justify-between gap-2">
+          <div className="pt-2 border-t border-stone-200 dark:border-stone-700 flex items-center justify-between gap-2 flex-wrap">
             {/* 關聯天數跳轉 */}
             {loc.dayNumbers?.length > 0 && (
               <div className="flex items-center gap-1">
@@ -136,7 +152,7 @@ const LocationMarker: React.FC<{
                   <button
                     key={d}
                     onClick={() => onGoToDay(d)}
-                    className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-primary)] text-white font-bold hover:opacity-90"
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-primary)] text-white font-bold hover:opacity-90 cursor-pointer"
                   >
                     D{d}
                   </button>
@@ -144,19 +160,33 @@ const LocationMarker: React.FC<{
               </div>
             )}
 
-            {/* 即時攝影機 */}
-            {loc.webcamUrl && (
+            <div className="flex items-center gap-2 ml-auto">
+              {/* 即時攝影機 */}
+              {loc.webcamUrl && (
+                <a
+                  href={loc.webcamUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] text-sky-600 dark:text-sky-400 font-medium hover:underline"
+                >
+                  <Video className="w-3 h-3" />
+                  <span>WebCam</span>
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              )}
+
+              {/* Google 地圖導航 */}
               <a
-                href={loc.webcamUrl}
+                href={getGoogleMapsUrl(loc)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-sky-600 dark:text-sky-400 font-medium"
+                className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 font-bold hover:bg-teal-100 dark:hover:bg-teal-900 transition-colors"
+                title="在 Google 地圖中開啟進行路程導航或規劃"
               >
-                <Video className="w-3 h-3" />
-                <span>WebCam</span>
+                <span>🗺️ 導航</span>
                 <ExternalLink className="w-2.5 h-2.5" />
               </a>
-            )}
+            </div>
           </div>
         </div>
       </Popup>
@@ -440,15 +470,29 @@ export const MapPage: React.FC = () => {
                     {loc.description}
                   </p>
 
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-stone-100 dark:border-stone-800 text-[11px]">
-                    <span className="text-stone-500 font-mono">
-                      {loc.dayNumbers?.length > 0 ? `Day ${loc.dayNumbers.join(', ')}` : '常設地點'}
-                    </span>
-                    {loc.stpNote && (
-                      <span className="text-emerald-600 dark:text-emerald-400 font-medium truncate max-w-[150px]">
-                        {loc.stpNote}
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-stone-100 dark:border-stone-800 text-[11px] gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-stone-500 font-mono shrink-0">
+                        {loc.dayNumbers?.length > 0 ? `Day ${loc.dayNumbers.join(', ')}` : '常設地點'}
                       </span>
-                    )}
+                      {loc.stpNote && (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-medium truncate max-w-[120px]">
+                          {loc.stpNote}
+                        </span>
+                      )}
+                    </div>
+
+                    <a
+                      href={getGoogleMapsUrl(loc)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:text-teal-800 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 border border-teal-200 dark:border-teal-800 px-2 py-0.5 rounded-lg shrink-0 transition-colors cursor-pointer"
+                      title="開啟 Google 地圖導航與規劃路線"
+                    >
+                      <span>導航</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
                   </div>
                 </div>
               );

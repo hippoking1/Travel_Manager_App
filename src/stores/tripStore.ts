@@ -1390,6 +1390,8 @@ export const useTripStore = create<TripStoreState>()(
                   paymentStatus: (acc.paymentStatus || 'confirmed') as any,
                   paymentStatusLabel: String(acc.paymentStatusLabel || '已確認'),
                   address: String(acc.address || ''),
+                  contactPhone: acc.contactPhone ? String(acc.contactPhone) : undefined,
+                  googleMapsUrl: acc.googleMapsUrl ? String(acc.googleMapsUrl) : undefined,
                   checkInTimeNotice: String(acc.checkInTimeNotice || ''),
                   keyPickupNotice: String(acc.keyPickupNotice || ''),
                   garbageRulesNotice: String(acc.garbageRulesNotice || ''),
@@ -1506,6 +1508,8 @@ export const useTripStore = create<TripStoreState>()(
                       ? loc.dayNumbers.split(',').map((n: string) => Number(n.trim())).filter(Boolean)
                       : Array.isArray(loc.dayNumbers) ? loc.dayNumbers : [],
                     stpNote: loc.stpNote ? String(loc.stpNote) : undefined,
+                    googleMapsUrl: loc.googleMapsUrl ? String(loc.googleMapsUrl) : undefined,
+                    address: loc.address ? String(loc.address) : undefined,
                   };
                 }).filter((l: any) => l.name || l.nameZh);
               }

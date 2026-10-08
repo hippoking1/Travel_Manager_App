@@ -48,7 +48,8 @@ export function extractAllTripLocations(plan: TripPlan): MapLocation[] {
   // 1. 提取真實住宿 Accommodations (若有，則為住宿基地的唯一絕對來源)
   if (hasAccommodations) {
     plan.accommodations.forEach((acc, idx) => {
-      const coords = inferCoordinates(acc.hotelName, acc.address, `${acc.baseNameZh || ''} ${destination}`);
+      // 優先從 googleMapsUrl 或 address 解析精確座標，否則退回飯店名與地區名推斷
+      const coords = inferCoordinates(acc.googleMapsUrl, acc.address, `${acc.hotelName} ${acc.baseNameZh || ''} ${destination}`);
       if (coords) {
         const name = acc.hotelName.trim();
         const baseArea = acc.baseNameZh?.trim() || '';
@@ -68,6 +69,8 @@ export function extractAllTripLocations(plan: TripPlan): MapLocation[] {
           category: 'base',
           description: `預訂住宿：${acc.hotelName}${acc.roomType ? ` (${acc.roomType})` : ''}${baseArea ? ` • 地區：${baseArea}` : ''}`,
           dayNumbers: days,
+          googleMapsUrl: acc.googleMapsUrl,
+          address: acc.address,
         });
       }
     });

@@ -245,6 +245,8 @@ export interface MapLocation {
   webcamUrl?: string;          // 即時影像連結
   meteoUrl?: string;           // 氣象連結
   tags?: string[];
+  googleMapsUrl?: string;      // Google 地圖連結
+  address?: string;            // 地址
 }
 
 // ============================================================

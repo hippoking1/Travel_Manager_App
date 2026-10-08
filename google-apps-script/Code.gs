@@ -21,10 +21,10 @@ var DEFAULT_HEADERS = {
   Expenses: ["tripId", "id", "timestamp", "dayNumber", "category", "amount", "currency", "note", "paidBy"],
   Checklist: ["tripId", "id", "category", "categoryLabel", "item", "checked", "priority", "assignedTo", "altitudeRange"],
   Bookmarks: ["tripId", "id", "locationId", "locationName", "notes", "timestamp"],
-  Accommodations: ["tripId", "id", "baseId", "baseNameZh", "hotelName", "roomType", "checkInDate", "checkOutDate", "nights", "bookingPlatform", "confirmationCode", "totalPrice", "currency", "paymentStatus", "paymentStatusLabel", "address", "checkInTimeNotice", "keyPickupNotice", "garbageRulesNotice", "kitchenRulesNotice", "notes"],
+  Accommodations: ["tripId", "id", "baseId", "baseNameZh", "hotelName", "roomType", "checkInDate", "checkOutDate", "nights", "bookingPlatform", "confirmationCode", "totalPrice", "currency", "paymentStatus", "paymentStatusLabel", "address", "contactPhone", "googleMapsUrl", "checkInTimeNotice", "keyPickupNotice", "garbageRulesNotice", "kitchenRulesNotice", "notes"],
   Transports: ["tripId", "id", "category", "categoryLabel", "title", "routeFrom", "routeTo", "departureTime", "operatorNumber", "bookingReference", "seatsInfo", "ticketType", "platformNotice", "luggageNotice", "boardingNotice", "notes"],
   Itinerary: ["tripId", "dayId", "day", "baseId", "title", "subtitle", "highlights", "timeBlocksJson", "foodNotesJson", "updatedAt"],
-  Locations: ["tripId", "id", "name", "nameZh", "category", "lat", "lng", "altitude", "description", "dayNumbers", "stpNote"]
+  Locations: ["tripId", "id", "name", "nameZh", "category", "lat", "lng", "altitude", "description", "dayNumbers", "stpNote", "googleMapsUrl", "address"]
 };
 
 /**
@@ -62,9 +62,10 @@ function ensureHeaders(sheet, sheetName, sampleObj) {
   if (defHeaders && defHeaders.length > 0) {
     var hasTripId = existingHeaders.indexOf("tripId") > -1;
     var isItineraryValid = sheetName !== "Itinerary" || existingHeaders.indexOf("timeBlocksJson") > -1;
+    var isAccommodationsValid = sheetName !== "Accommodations" || existingHeaders.indexOf("googleMapsUrl") > -1;
 
-    // 若缺少關鍵欄位 (如 tripId 或 timeBlocksJson)，自動升級標題列為最新標準標題
-    if (!hasTripId || !isItineraryValid) {
+    // 若缺少關鍵欄位 (如 tripId、timeBlocksJson 或 googleMapsUrl)，自動升級標題列為最新標準標題
+    if (!hasTripId || !isItineraryValid || !isAccommodationsValid) {
       sheet.getRange(1, 1, 1, Math.max(existingHeaders.length, defHeaders.length)).clearContent();
       sheet.getRange(1, 1, 1, defHeaders.length).setValues([defHeaders]);
       return defHeaders;
@@ -365,6 +366,8 @@ function doPost(e) {
             paymentStatus: acc.paymentStatus || "",
             paymentStatusLabel: acc.paymentStatusLabel || "",
             address: acc.address || "",
+            contactPhone: acc.contactPhone || "",
+            googleMapsUrl: acc.googleMapsUrl || "",
             checkInTimeNotice: acc.checkInTimeNotice || "",
             keyPickupNotice: acc.keyPickupNotice || "",
             garbageRulesNotice: acc.garbageRulesNotice || "",
@@ -442,7 +445,9 @@ function doPost(e) {
             altitude: loc.altitude !== undefined ? loc.altitude : "",
             description: loc.description || "",
             dayNumbers: Array.isArray(loc.dayNumbers) ? loc.dayNumbers.join(",") : (loc.dayNumbers || ""),
-            stpNote: loc.stpNote || ""
+            stpNote: loc.stpNote || "",
+            googleMapsUrl: loc.googleMapsUrl || "",
+            address: loc.address || ""
           };
         });
       }
