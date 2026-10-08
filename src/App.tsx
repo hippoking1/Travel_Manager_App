@@ -4,6 +4,7 @@ import { AppShell } from './components/layout/AppShell';
 import { ItineraryPage } from './components/itinerary/ItineraryPage';
 import { MapPage } from './components/map/MapPage';
 import { BookingsPage } from './components/bookings/BookingsPage';
+import { AttractionsPage } from './components/attractions/AttractionsPage';
 import { BudgetPage } from './components/budget/BudgetPage';
 import { WeatherPage } from './components/weather/WeatherPage';
 import { ChecklistPage } from './components/checklist/ChecklistPage';
@@ -27,6 +28,7 @@ export const App: React.FC = () => {
           <Route path="/" element={<ItineraryPage />} />
           <Route path="/import" element={<ImportPage />} />
           <Route path="/bookings" element={<BookingsPage />} />
+          <Route path="/attractions" element={<AttractionsPage />} />
           <Route path="/checklist" element={<ChecklistPage />} />
           <Route path="/map" element={<MapPage />} />
           <Route path="/budget" element={<BudgetPage />} />

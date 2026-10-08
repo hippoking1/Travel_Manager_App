@@ -16,9 +16,11 @@ import {
   Compass, 
   Copy, 
   ArrowRightCircle, 
-  Inbox
+  Inbox,
+  ExternalLink
 } from 'lucide-react';
 import type { TimeBlock, TransportDetail, ContainerId } from '../../../types';
+import { SCENIC_SUB_TAGS } from '../../../types';
 import { useTripStore } from '../../../stores/tripStore';
 import { useItinerary } from '../../../stores/selectors';
 import { useConfirm } from '../../ui/ConfirmDialog';
@@ -296,12 +298,26 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
           </div>
         )}
 
-        {/* 地點、海拔與成員標籤 */}
+        {/* 地點、海拔、導航與成員標籤 */}
         <div className="flex items-center justify-between gap-1 flex-wrap pt-1">
           <div className="flex items-center gap-1 flex-wrap">
             {block.tags.map((tag) => (
               <PersonaBadge key={tag} tag={tag} size="sm" />
             ))}
+
+            {/* 景觀交通次標籤 (高山名峰、歷史文化、超市購物、親子風景) */}
+            {block.subCategories?.map((cat) => {
+              const meta = SCENIC_SUB_TAGS.find((m) => m.category === cat);
+              if (!meta) return null;
+              return (
+                <span
+                  key={cat}
+                  className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
+                >
+                  {meta.emoji} {meta.label}
+                </span>
+              );
+            })}
           </div>
 
           <div className="flex items-center gap-2 text-[11px] text-stone-400 ml-auto font-mono">
@@ -316,6 +332,19 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
                 <MapPin className="w-3 h-3 text-stone-400 shrink-0" />
                 <span className="truncate">{block.locationName}</span>
               </span>
+            )}
+            {block.googleMapsUrl && (
+              <a
+                href={block.googleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-0.5 text-teal-600 dark:text-teal-400 hover:underline shrink-0"
+                title="開啟 Google 地圖導航"
+              >
+                <span>導航</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
             )}
           </div>
         </div>

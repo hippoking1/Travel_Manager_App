@@ -23,13 +23,13 @@ import {
   Inbox,
   Calendar,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { DayItinerary, TimeBlock, ContainerId } from '../../../types';
 import { useTripStore } from '../../../stores/tripStore';
 import { useConfig, useBases, useBacklog } from '../../../stores/selectors';
 import { formatDayDate } from '../../../utils/dates';
 import { toast } from '../../ui/Toast';
 import { DayColumn } from './DayColumn';
-import { BacklogPanel } from './BacklogPanel';
 import { ActivityCard } from './ActivityCard';
 
 export interface PlannerBoardProps {
@@ -41,6 +41,7 @@ export const PlannerBoard: React.FC<PlannerBoardProps> = ({
   days,
   isFiltered = false,
 }) => {
+  const navigate = useNavigate();
   const { moveBlock, reorderDays, undo } = useTripStore();
   const config = useConfig();
   const bases = useBases();
@@ -290,19 +291,15 @@ export const PlannerBoard: React.FC<PlannerBoardProps> = ({
             );
           })}
 
-          {/* 待排景點池跳轉標籤 */}
+          {/* 景點池跳轉標籤 */}
           <button
             type="button"
-            onClick={() => handleJumpToDay('backlog')}
-            className={`px-2.5 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all flex items-center gap-1.5 border ml-1 ${
-              activeDayId === 'backlog'
-                ? 'bg-amber-600 text-white border-transparent shadow-xs'
-                : 'bg-[var(--color-bg)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:text-[var(--color-text)]'
-            }`}
-            title="跳轉至右側待排景點池"
+            onClick={() => navigate('/attractions')}
+            className="px-2.5 py-1 rounded-xl text-xs font-semibold shrink-0 transition-all flex items-center gap-1.5 border ml-1 bg-[var(--color-bg)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:text-[var(--color-text)] hover:border-amber-400 cursor-pointer"
+            title="前往景點頁面檢視待排景點池"
           >
             <Inbox className="w-3 h-3 text-amber-500" />
-            <span>待排池</span>
+            <span>景點池</span>
             <span className="font-mono text-[10px] px-1 rounded-full bg-[var(--color-bg-subtle)]">
               {backlog.length}
             </span>
@@ -375,9 +372,6 @@ export const PlannerBoard: React.FC<PlannerBoardProps> = ({
                 />
               ))}
             </SortableContext>
-
-            {/* 待排景點池 (Backlog) 固定於右側 */}
-            <BacklogPanel disabled={isFiltered} />
           </div>
 
           {/* 拖拉中浮起預覽卡片 */}

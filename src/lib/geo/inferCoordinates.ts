@@ -20,15 +20,23 @@ export function extractCoordsFromUrlOrText(text?: string): [number, number] | un
     if (!isNaN(lat) && !isNaN(lng)) return [lat, lng];
   }
 
-  // 2. 匹配 q=lat,lng 或 ll=lat,lng 或 query=lat,lng
-  const qMatch = str.match(/[?&](?:q|ll|query)=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  // 2. 匹配 q=lat,lng 或 ll=lat,lng 或 query=lat,lng 或 destination=lat,lng
+  const qMatch = str.match(/[?&](?:q|ll|query|destination)=(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (qMatch) {
     const lat = parseFloat(qMatch[1]);
     const lng = parseFloat(qMatch[2]);
     if (!isNaN(lat) && !isNaN(lng)) return [lat, lng];
   }
 
-  // 3. 匹配純經緯度格式 "46.0207, 7.7491"
+  // 3. 匹配 Google Maps data 參數 !3d{lat}!4d{lng} (例如景點頁面精確地標座標)
+  const dataMatch = str.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (dataMatch) {
+    const lat = parseFloat(dataMatch[1]);
+    const lng = parseFloat(dataMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng)) return [lat, lng];
+  }
+
+  // 4. 匹配純經緯度格式 "46.0207, 7.7491"
   const rawMatch = str.match(/^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/);
   if (rawMatch) {
     const lat = parseFloat(rawMatch[1]);

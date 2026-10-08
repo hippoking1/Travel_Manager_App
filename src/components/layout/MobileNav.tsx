@@ -13,7 +13,8 @@ import {
   Printer, 
   X,
   Compass,
-  Sparkles
+  Sparkles,
+  Landmark
 } from 'lucide-react';
 import { useActiveTrip } from '../../stores/selectors';
 import { hasModule } from '../../config/modules';
@@ -113,6 +114,18 @@ export const MobileNav: React.FC = () => {
             </NavLink>
 
             <div className="grid grid-cols-2 gap-2 text-xs">
+              <NavLink
+                to="/attractions"
+                onClick={() => setShowMore(false)}
+                className="p-3 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/60 dark:border-stone-800 flex items-center gap-2.5 font-semibold text-stone-800 dark:text-stone-200 hover:border-teal-500"
+              >
+                <Landmark className="w-5 h-5 text-teal-600 dark:text-teal-400 shrink-0" />
+                <div>
+                  <span className="block">景點清單</span>
+                  <span className="text-[10px] text-stone-400 font-normal">多重篩選與景點池</span>
+                </div>
+              </NavLink>
+
               <NavLink
                 to="/checklist"
                 onClick={() => setShowMore(false)}

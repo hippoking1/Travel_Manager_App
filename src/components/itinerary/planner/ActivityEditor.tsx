@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import type { TimeBlock, PersonaTag, TransportType, STPCoverage } from '../../../types';
+import type { TimeBlock, PersonaTag, TransportType, STPCoverage, LocationCategory } from '../../../types';
+import { SCENIC_SUB_TAGS } from '../../../types';
+import { extractCoordsFromUrlOrText } from '../../../lib/geo/inferCoordinates';
 import { useTripStore } from '../../../stores/tripStore';
 import { useModules } from '../../../stores/selectors';
 import { hasModule } from '../../../config/modules';
@@ -32,8 +34,10 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('11:30');
   const [locationName, setLocationName] = useState('');
+  const [googleMapsUrl, setGoogleMapsUrl] = useState('');
   const [altitude, setAltitude] = useState('');
   const [tags, setTags] = useState<PersonaTag[]>(['senior-friendly']);
+  const [subCategories, setSubCategories] = useState<LocationCategory[]>([]);
 
   // 交通欄位
   const [transportFrom, setTransportFrom] = useState('');
@@ -48,8 +52,13 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
       setStartTime(initialBlock.startTime || '09:00');
       setEndTime(initialBlock.endTime || '11:30');
       setLocationName(initialBlock.locationName || '');
+      setGoogleMapsUrl(initialBlock.googleMapsUrl || '');
       setAltitude(initialBlock.altitude ? String(initialBlock.altitude) : '');
       setTags(initialBlock.tags || ['senior-friendly']);
+      setSubCategories(
+        initialBlock.subCategories ||
+        (initialBlock.category ? [initialBlock.category] : [])
+      );
 
       if (initialBlock.transport) {
         setTransportFrom(initialBlock.transport.from || '');
@@ -68,8 +77,10 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
       setStartTime('09:00');
       setEndTime('11:30');
       setLocationName('');
+      setGoogleMapsUrl('');
       setAltitude('');
       setTags(['senior-friendly']);
+      setSubCategories([]);
       setTransportFrom('');
       setTransportTo('');
       setTransportType('train');
@@ -81,6 +92,11 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
     e.preventDefault();
     if (!title.trim()) return;
 
+    const parsedCoords = extractCoordsFromUrlOrText(googleMapsUrl);
+    const primaryCategory = subCategories.length > 0 
+      ? subCategories[0] 
+      : (tags.includes('scenic-train') ? 'station' : undefined);
+
     const blockData: Omit<TimeBlock, 'id'> = {
       title: title.trim(),
       description: description.trim(),
@@ -89,7 +105,11 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
       endTime: isBacklog ? undefined : endTime,
       periodLabel: isBacklog ? undefined : formatTimeSpan(startTime, endTime),
       locationName: locationName.trim() || undefined,
+      googleMapsUrl: googleMapsUrl.trim() || undefined,
+      coordinates: parsedCoords || initialBlock?.coordinates,
       altitude: altitude ? parseInt(altitude, 10) : undefined,
+      category: primaryCategory,
+      subCategories: subCategories.length > 0 ? subCategories : undefined,
       tags,
       transport:
         transportFrom && transportTo
@@ -198,6 +218,14 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
           </div>
         </div>
 
+        {/* Google Maps 導航與精確定位連結 */}
+        <Input
+          label="Google Maps 連結 / 導航網址"
+          placeholder="例如：https://maps.app.goo.gl/... 或包含座標之 Google 地圖連結"
+          value={googleMapsUrl}
+          onChange={(e) => setGoogleMapsUrl(e.target.value)}
+        />
+
         {/* 交通細節設定 */}
         <div className="p-3.5 bg-stone-50 dark:bg-stone-800/50 rounded-2xl border border-stone-200/60 dark:border-stone-800 space-y-3">
           <span className="block text-xs font-semibold text-stone-700 dark:text-stone-300">
@@ -277,6 +305,46 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
               );
             })}
           </div>
+
+          {/* 景觀交通次標籤 (對應地理地圖高山名峰、歷史文化、超市購物、親子風景) */}
+          {tags.includes('scenic-train') && (
+            <div className="mt-3 p-3 bg-red-50/50 dark:bg-red-950/20 rounded-2xl border border-red-200/60 dark:border-red-900/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-red-800 dark:text-red-300 flex items-center gap-1.5">
+                  <span>🚂 景觀交通次標籤 (對應地理地圖篩選)</span>
+                </span>
+                <span className="text-[10px] text-red-600/80 dark:text-red-400">
+                  可複選分類標籤
+                </span>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {SCENIC_SUB_TAGS.map(({ category, label, emoji }) => {
+                  const isSelected = subCategories.includes(category);
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => {
+                        if (isSelected) {
+                          setSubCategories(subCategories.filter((c) => c !== category));
+                        } else {
+                          setSubCategories([...subCategories, category]);
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer select-none flex items-center gap-1 ${
+                        isSelected
+                          ? 'bg-red-100 dark:bg-red-900/50 text-red-900 dark:text-red-200 border-red-500 shadow-xs ring-1 ring-red-500/30 font-bold'
+                          : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-400 border-stone-200 dark:border-stone-800 hover:border-red-300'
+                      }`}
+                    >
+                      <span>{emoji}</span>
+                      <span>{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 按鈕列 */}

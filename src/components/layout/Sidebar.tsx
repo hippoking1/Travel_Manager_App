@@ -14,7 +14,8 @@ import {
   Moon, 
   Clock, 
   Compass,
-  Sparkles
+  Sparkles,
+  Landmark
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useActiveTrip } from '../../stores/selectors';
@@ -33,6 +34,7 @@ export const Sidebar: React.FC = () => {
     { to: '/', label: '每日行程', icon: CalendarDays },
     { to: '/import', label: 'AI 行程匯入', icon: Sparkles },
     { to: '/bookings', label: '住宿與交通', icon: Building2 },
+    { to: '/attractions', label: '景點', icon: Landmark },
     { to: '/checklist', label: '行前清單', icon: CheckSquare },
     { to: '/map', label: '地理地圖', icon: MapPin },
     { to: '/budget', label: '預算記帳', icon: Wallet },

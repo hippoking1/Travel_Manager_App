@@ -10,11 +10,16 @@ import { inferCoordinates } from './inferCoordinates';
  * 依活動標籤與標題關鍵字，智慧推斷地點分類
  */
 export function inferLocationCategory(block: TimeBlock): LocationCategory {
+  // 1. 若有手動指定的次標籤或類別，絕對優先採用，確保篩選 100% 精準
+  if (block.category) {
+    return block.category;
+  }
+  if (block.subCategories && block.subCategories.length > 0) {
+    return block.subCategories[0];
+  }
+
   const text = `${block.title} ${block.locationName || ''} ${block.description || ''}`;
 
-  if (block.tags?.includes('scenic-train') || /機場|車站|火車站|月台|特急|航班|高鐵|捷運|纜車/i.test(text)) {
-    return 'station';
-  }
   if (block.tags?.includes('budget-shopping') || /超市|商店街|購物|藥妝|市場|Coop|Migros|唐吉訶德|百貨/i.test(text)) {
     return 'shopping';
   }
@@ -26,6 +31,9 @@ export function inferLocationCategory(block: TimeBlock): LocationCategory {
   }
   if (block.tags?.includes('kids-highlight') || /公園|湖|運河|水族館|動物園|海灘|牧場|農場|樂園|溫泉/i.test(text)) {
     return 'attraction';
+  }
+  if (block.tags?.includes('scenic-train') || /機場|車站|火車站|月台|特急|航班|高鐵|捷運|纜車/i.test(text)) {
+    return 'station';
   }
 
   return 'attraction';
@@ -106,8 +114,10 @@ export function extractAllTripLocations(plan: TripPlan): MapLocation[] {
 
       if (!placeName) return;
 
-      // 推斷坐標時不使用隨機 jitter，保證同一地點座標絕對一致
-      const coords = block.coordinates || inferCoordinates(placeName, block.title, destination, false);
+      // 推斷坐標時優先自 googleMapsUrl 提取，其次為既有 coordinates，再退回名稱推斷
+      const coords = (block.googleMapsUrl ? inferCoordinates(block.googleMapsUrl) : undefined)
+        || block.coordinates 
+        || inferCoordinates(placeName, block.title, destination, false);
       if (!coords) return;
 
       const category = inferLocationCategory(block);
@@ -121,6 +131,9 @@ export function extractAllTripLocations(plan: TripPlan): MapLocation[] {
           existing.dayNumbers.push(dayNum);
           existing.dayNumbers.sort((a, b) => a - b);
         }
+        if (!existing.googleMapsUrl && block.googleMapsUrl) {
+          existing.googleMapsUrl = block.googleMapsUrl;
+        }
       } else {
         visitedNames.set(normalizedKey, {
           id: block.id || `loc_gen_${dayNum}_${bIdx + 1}`,
@@ -132,6 +145,7 @@ export function extractAllTripLocations(plan: TripPlan): MapLocation[] {
           description: block.description || `${block.period || ''} 活動：${block.title}`,
           dayNumbers: [dayNum],
           tags: block.tags,
+          googleMapsUrl: block.googleMapsUrl,
         });
       }
     });

@@ -213,4 +213,67 @@ describe('geo - extractAllTripLocations', () => {
     expect(baseLocations.some((b) => b.nameZh.includes('格林德瓦冰川景觀飯店'))).toBe(true);
     expect(baseLocations.some((b) => b.nameZh.includes('琉森湖畔古典飯店'))).toBe(true);
   });
+
+  it('extracts precise coordinates and assigns peak category from googleMapsUrl and scenic subCategories', () => {
+    const tripWithCustomSpot: TripPlan = {
+      id: 'trip_custom_spot',
+      name: '瑞士名峰測試',
+      destination: '瑞士',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+      config: {
+        tripName: '瑞士名峰測試',
+        subtitle: '',
+        startDate: '2027-06-01',
+        totalDays: 1,
+        travelers: [],
+        bases: [],
+        currencies: DEFAULT_CURRENCY_CONFIG,
+      },
+      itinerary: [
+        {
+          id: 'd1',
+          day: 1,
+          baseId: 'b1',
+          title: 'Day 1 名峰日',
+          subtitle: '',
+          highlights: [],
+          timeBlocks: [
+            {
+              id: 'tb_matterhorn',
+              title: '馬特洪峰冰川天堂',
+              locationName: 'Matterhorn Glacier Paradise',
+              description: '最高纜車站體驗',
+              period: 'morning',
+              tags: ['scenic-train'],
+              category: 'peak',
+              subCategories: ['peak'],
+              googleMapsUrl: 'https://www.google.com/maps/place/Matterhorn+Glacier+Paradise/@45.9383,7.7297,15z/data=!3d45.9383!4d7.7297',
+            },
+          ],
+          foodNotes: [],
+        },
+      ],
+      backlog: [],
+      modules: ['swiss'],
+      locations: [],
+      expenses: [],
+      checklist: [],
+      accommodations: [],
+      transports: [],
+      bookmarks: [],
+    };
+
+    const extracted = extractAllTripLocations(tripWithCustomSpot);
+    expect(extracted.length).toBe(1);
+    const spot = extracted[0];
+
+    // 分類應為 peak (高山名峰) 而非預設的 station
+    expect(spot.category).toBe('peak');
+    // 應精確解析出 Google Maps URL 中的座標
+    expect(spot.coordinates[0]).toBeCloseTo(45.9383, 3);
+    expect(spot.coordinates[1]).toBeCloseTo(7.7297, 3);
+    // 應保留 googleMapsUrl 以便地圖導航
+    expect(spot.googleMapsUrl).toContain('Matterhorn+Glacier+Paradise');
+  });
 });

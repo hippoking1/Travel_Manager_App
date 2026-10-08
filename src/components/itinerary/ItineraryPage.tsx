@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Plus, RotateCcw, Calendar, Info, Sparkles, Share2 } from 'lucide-react';
+import { Users, Plus, RotateCcw, Calendar, Info, Sparkles, Share2, Landmark } from 'lucide-react';
 import { useTripStore } from '../../stores/tripStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useActiveTrip, useItinerary, useConfig } from '../../stores/selectors';
+import { useActiveTrip, useItinerary, useConfig, useBacklog } from '../../stores/selectors';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { Button } from '../ui/Button';
 import { toast } from '../ui/Toast';
@@ -16,6 +16,7 @@ export const ItineraryPage: React.FC = () => {
   const navigate = useNavigate();
   const activeTrip = useActiveTrip();
   const itinerary = useItinerary();
+  const backlog = useBacklog();
   const config = useConfig();
   const { addDay, resetItineraryToDemo } = useTripStore();
   const confirm = useConfirm();
@@ -131,6 +132,16 @@ export const ItineraryPage: React.FC = () => {
               title="複製目前旅程 JSON 給 AI 微調"
             >
               匯出給 AI
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => navigate('/attractions')}
+              icon={<Landmark className="w-3.5 h-3.5 text-teal-600" />}
+              title="前往景點清單與待排景點池"
+            >
+              景點池 ({backlog.length})
             </Button>
 
             <Button

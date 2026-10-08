@@ -133,7 +133,25 @@ export interface TimeBlock {
   transport?: TransportDetail;
   tags: PersonaTag[];
   tips?: string[];
+  googleMapsUrl?: string;      // Google Maps 連結或座標導航網址
+  category?: LocationCategory; // 地圖主分類 (peak | culture | shopping | attraction | station)
+  subCategories?: LocationCategory[]; // 地圖次標籤 (高山名峰、歷史文化、超市購物、親子風景)
 }
+
+/** 景觀交通/地理地圖次標籤設定 */
+export interface ScenicSubTagMeta {
+  category: LocationCategory;
+  label: string;
+  emoji: string;
+  color: string;
+}
+
+export const SCENIC_SUB_TAGS: ScenicSubTagMeta[] = [
+  { category: 'peak', label: '高山名峰', emoji: '⛰️', color: '#EF4444' },
+  { category: 'culture', label: '歷史文化', emoji: '🏛️', color: '#EAB308' },
+  { category: 'shopping', label: '超市購物', emoji: '🛒', color: '#10B981' },
+  { category: 'attraction', label: '親子風景', emoji: '🎡', color: '#06B6D4' },
+];
 
 export interface FoodNote {
   meal: 'breakfast' | 'lunch' | 'dinner' | 'snack';

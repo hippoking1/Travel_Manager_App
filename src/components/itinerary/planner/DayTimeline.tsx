@@ -16,6 +16,7 @@ import {
   verticalListSortingStrategy,
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
+import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
   Zap, 
@@ -24,11 +25,12 @@ import {
   CloudSun, 
   Backpack, 
   AlertCircle,
-  Sparkles
+  Sparkles,
+  Inbox
 } from 'lucide-react';
 import type { DayItinerary, TimeBlock, ContainerId } from '../../../types';
 import { useTripStore } from '../../../stores/tripStore';
-import { useConfig, useBases } from '../../../stores/selectors';
+import { useConfig, useBases, useBacklog } from '../../../stores/selectors';
 import { formatDayDate } from '../../../utils/dates';
 import { findConflicts } from '../../../lib/itinerary';
 import { toast } from '../../ui/Toast';
@@ -36,7 +38,6 @@ import { Button } from '../../ui/Button';
 import { DayStrip } from './DayStrip';
 import { ActivityCard } from './ActivityCard';
 import { ActivityEditor } from './ActivityEditor';
-import { BacklogPanel } from './BacklogPanel';
 
 export interface DayTimelineProps {
   days: DayItinerary[];
@@ -51,8 +52,10 @@ export const DayTimeline: React.FC<DayTimelineProps> = ({
   onSelectDay,
   isFiltered = false,
 }) => {
+  const navigate = useNavigate();
   const config = useConfig();
   const bases = useBases();
+  const backlog = useBacklog();
   const { moveBlock, reflowDay, undo } = useTripStore();
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -153,61 +156,69 @@ export const DayTimeline: React.FC<DayTimelineProps> = ({
         </div>
       )}
 
-      {/* 主要內容：左側時間軸 + 右側待排景點池 (大螢幕時可並列) */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-start">
-        <div className="lg:col-span-3 space-y-4">
-          {/* 當天標題概覽卡 */}
-          <div className="bg-white dark:bg-stone-900 border border-stone-200/80 dark:border-stone-800 rounded-3xl p-5 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-lg bg-teal-50 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/40">
-                    DAY {String(currentDay.day).padStart(2, '0')} · {formattedDate}
+      {/* 主要內容：全寬時間軸 */}
+      <div className="space-y-4">
+        {/* 當天標題概覽卡 */}
+        <div className="bg-white dark:bg-stone-900 border border-stone-200/80 dark:border-stone-800 rounded-3xl p-5 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-lg bg-teal-50 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/40">
+                  DAY {String(currentDay.day).padStart(2, '0')} · {formattedDate}
+                </span>
+                {base && (
+                  <span
+                    style={{
+                      backgroundColor: `${base.color}15`,
+                      color: base.color,
+                      borderColor: `${base.color}35`,
+                    }}
+                    className="px-2 py-0.5 rounded-full text-xs font-semibold border"
+                  >
+                    {base.nameZh}
                   </span>
-                  {base && (
-                    <span
-                      style={{
-                        backgroundColor: `${base.color}15`,
-                        color: base.color,
-                        borderColor: `${base.color}35`,
-                      }}
-                      className="px-2 py-0.5 rounded-full text-xs font-semibold border"
-                    >
-                      {base.nameZh}
-                    </span>
-                  )}
-                </div>
-                <h2 className="text-lg sm:text-xl font-black text-stone-900 dark:text-stone-100 tracking-tight">
-                  {currentDay.title}
-                </h2>
-                {currentDay.subtitle && (
-                  <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-0.5">
-                    {currentDay.subtitle}
-                  </p>
                 )}
               </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => reflowDay(containerId)}
-                  icon={<Zap className="w-3.5 h-3.5 text-amber-500" />}
-                  className="text-xs"
-                >
-                  自動排時程
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setShowAddModal(true)}
-                  icon={<Plus className="w-3.5 h-3.5" />}
-                  className="text-xs"
-                >
-                  新增活動
-                </Button>
-              </div>
+              <h2 className="text-lg sm:text-xl font-black text-stone-900 dark:text-stone-100 tracking-tight">
+                {currentDay.title}
+              </h2>
+              {currentDay.subtitle && (
+                <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-0.5">
+                  {currentDay.subtitle}
+                </p>
+              )}
             </div>
+
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <button
+                type="button"
+                onClick={() => navigate('/attractions')}
+                className="px-3 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="前往景點頁面檢視待排景點池"
+              >
+                <Inbox className="w-3.5 h-3.5 text-amber-600" />
+                <span>景點池 ({backlog.length})</span>
+              </button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => reflowDay(containerId)}
+                icon={<Zap className="w-3.5 h-3.5 text-amber-500" />}
+                className="text-xs"
+              >
+                自動排時程
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowAddModal(true)}
+                icon={<Plus className="w-3.5 h-3.5" />}
+                className="text-xs"
+              >
+                新增活動
+              </Button>
+            </div>
+          </div>
 
             {/* 亮點標籤 */}
             {currentDay.highlights && currentDay.highlights.length > 0 && (
@@ -401,12 +412,6 @@ export const DayTimeline: React.FC<DayTimelineProps> = ({
             </div>
           )}
         </div>
-
-        {/* 右側待排景點池 (Backlog) */}
-        <div className="lg:col-span-1">
-          <BacklogPanel disabled={isFiltered} />
-        </div>
-      </div>
 
       {/* 新增活動 Modal */}
       {showAddModal && (
