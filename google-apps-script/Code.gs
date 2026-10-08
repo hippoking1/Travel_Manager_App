@@ -438,13 +438,15 @@ function doPost(e) {
       // G. 同步 Locations (景點與地理地圖點位)
       if (Array.isArray(tripData.locations)) {
         stats.locations = syncSheetRows("Locations", tripData.locations, function (loc) {
+          var latVal = (loc.lat !== undefined && loc.lat !== "") ? loc.lat : (Array.isArray(loc.coordinates) ? loc.coordinates[0] : "");
+          var lngVal = (loc.lng !== undefined && loc.lng !== "") ? loc.lng : (Array.isArray(loc.coordinates) ? loc.coordinates[1] : "");
           return {
             id: loc.id || Utilities.getUuid(),
             name: loc.name || "",
             nameZh: loc.nameZh || loc.name || "",
             category: loc.category || "viewpoint",
-            lat: loc.lat !== undefined ? loc.lat : "",
-            lng: loc.lng !== undefined ? loc.lng : "",
+            lat: latVal,
+            lng: lngVal,
             altitude: loc.altitude !== undefined ? loc.altitude : "",
             description: loc.description || "",
             dayNumbers: Array.isArray(loc.dayNumbers) ? loc.dayNumbers.join(",") : (loc.dayNumbers || ""),

@@ -55,7 +55,13 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
     if (initialBlock) {
       setTitle(initialBlock.title || '');
       setDescription(initialBlock.description || '');
-      setBaseId(initialBlock.baseId || '');
+      // 優先取用 initialBlock.baseId，若無則備援取所屬日程天數的 baseId
+      const targetDay = dayIdOrNumber !== undefined
+        ? itinerary.find((d) => (d.id || String(d.day)) === String(dayIdOrNumber) || d.day === dayIdOrNumber)
+        : undefined;
+      const initialBaseVal = initialBlock.baseId || targetDay?.baseId || '';
+      const matched = bases.find((b) => b.id === initialBaseVal || b.nameZh === initialBaseVal || b.name === initialBaseVal);
+      setBaseId(matched ? matched.id : initialBaseVal);
       setStartTime(initialBlock.startTime || '09:00');
       setEndTime(initialBlock.endTime || '11:30');
       setLocationName(initialBlock.locationName || '');
@@ -234,9 +240,15 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
             <option value="">未指定 / 全區通用</option>
             {bases.map((b) => (
               <option key={b.id} value={b.id}>
-                {b.nameZh} ({b.name})
+                {b.nameZh} {b.name && b.name !== b.nameZh ? `(${b.name})` : ''}
               </option>
             ))}
+            {/* 跨裝置防禦：若 baseId 存在但當前 bases 清單中暫無該 ID，動態補齊 option，防止 HTML select 強制重設為空白 */}
+            {baseId && !bases.some((b) => b.id === baseId) && (
+              <option value={baseId}>
+                {baseId} (自訂/同步區域)
+              </option>
+            )}
           </select>
         </div>
 

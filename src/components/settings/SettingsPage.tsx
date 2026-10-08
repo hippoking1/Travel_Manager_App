@@ -17,6 +17,7 @@ import {
   Pencil,
   RefreshCw,
   AlertTriangle,
+  Download,
 } from 'lucide-react';
 import { useTripStore } from '../../stores/tripStore';
 import { useActiveTrip } from '../../stores/selectors';
@@ -70,6 +71,11 @@ export const SettingsPage: React.FC = () => {
       checklist?: number;
       expenses?: number;
     };
+  } | null>(null);
+  const [isPulling, setIsPulling] = useState(false);
+  const [pullResult, setPullResult] = useState<{
+    success: boolean;
+    message: string;
   } | null>(null);
 
   // 表單內部狀態
@@ -211,6 +217,38 @@ export const SettingsPage: React.FC = () => {
       setPushResult({ success: false, message: `發布發生錯誤: ${msg}` });
     } finally {
       setIsPushing(false);
+    }
+  };
+
+  // 全量從 Google 試算表拉取最新旅程資料 (跨裝置更新)
+  const handlePullTrip = async () => {
+    if (!gasUrl.trim()) {
+      setPullResult({
+        success: false,
+        message: '請先在下方填寫 Google Apps Script Web App URL 並儲存。',
+      });
+      return;
+    }
+    setIsPulling(true);
+    setPullResult(null);
+    try {
+      const ok = await fetchLatestFromSheets();
+      if (ok) {
+        setPullResult({
+          success: true,
+          message: '已成功從 Google 試算表載入最新旅程！包含日程景點、景點區域、待排池與預訂資料。',
+        });
+      } else {
+        setPullResult({
+          success: false,
+          message: '拉取失敗，請確認 Google Apps Script 網址與權限設定是否為「所有人」。',
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPullResult({ success: false, message: `拉取發生錯誤: ${msg}` });
+    } finally {
+      setIsPulling(false);
     }
   };
 
@@ -827,30 +865,63 @@ export const SettingsPage: React.FC = () => {
       {/* Tab 5: 雲端同步 */}
       {activeTab === 'sync' && (
         <div className="space-y-6">
-          {/* 1. 一鍵全量發布至 Google 試算表 */}
+          {/* 1. 雙向雲端同步：發布與拉取 */}
           <Card className="p-5 sm:p-6 space-y-4 border-l-4 border-l-[var(--color-primary)]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3">
               <div>
                 <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
                   <Cloud className="w-5 h-5 text-[var(--color-primary)]" />
-                  <span>發布目前旅程至 Google 試算表</span>
+                  <span>Google Sheets 雙向雲端同步</span>
                 </h3>
                 <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                  將目前選定的「<strong className="text-[var(--color-text)]">{activeTrip?.name || '當前行程'}</strong>」全部天數日程、住宿、交通預訂與清單一鍵完整寫入雲端試算表。
+                  支援一鍵推送本機進度至雲端，或從雲端拉取同行成員最新編輯的行程、景點區域、景點池與各項資料。
                 </p>
               </div>
 
-              <Button
-                type="button"
-                variant="primary"
-                onClick={handlePushTrip}
-                disabled={isPushing || !gasUrl.trim()}
-                className="shrink-0 font-medium"
-              >
-                <RefreshCw className={`w-4 h-4 mr-1.5 ${isPushing ? 'animate-spin' : ''}`} />
-                <span>{isPushing ? '正在發布中...' : '🚀 一鍵發布此旅程至雲端'}</span>
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePullTrip}
+                  disabled={isPulling || isFetchingRemote || !gasUrl.trim()}
+                  className="font-medium"
+                >
+                  <Download className={`w-4 h-4 mr-1.5 ${isPulling || isFetchingRemote ? 'animate-bounce' : ''}`} />
+                  <span>{isPulling || isFetchingRemote ? '正在拉取中...' : '📥 從雲端拉取最新資料'}</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={handlePushTrip}
+                  disabled={isPushing || !gasUrl.trim()}
+                  className="font-medium"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-1.5 ${isPushing ? 'animate-spin' : ''}`} />
+                  <span>{isPushing ? '正在發布中...' : '🚀 一鍵發布此旅程至雲端'}</span>
+                </Button>
+              </div>
             </div>
+
+            {/* 拉取結果通知 */}
+            {pullResult && (
+              <div
+                className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 ${
+                  pullResult.success
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
+                    : 'bg-red-500/10 border-red-500/30 text-red-800 dark:text-red-300'
+                }`}
+              >
+                {pullResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                )}
+                <div className="space-y-1 flex-1">
+                  <p className="font-semibold">{pullResult.message}</p>
+                </div>
+              </div>
+            )}
 
             {/* 發布結果通知 */}
             {pushResult && (

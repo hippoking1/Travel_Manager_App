@@ -107,6 +107,8 @@ export function extractAllTripLocations(plan: TripPlan): MapLocation[] {
   // 2. 全面提取行程 Itinerary 中的每個活動 TimeBlock (嚴格去重，停用 jitter)
   (plan.itinerary || []).forEach((day) => {
     const dayNum = day.day;
+    const dayBase = (plan.config?.bases || []).find((b) => b.id === day.baseId);
+
     (day.timeBlocks || []).forEach((block, bIdx) => {
       const placeName = (block.locationName && block.locationName.trim()) 
         ? block.locationName.trim() 
@@ -114,11 +116,18 @@ export function extractAllTripLocations(plan: TripPlan): MapLocation[] {
 
       if (!placeName) return;
 
-      // 推斷坐標時優先自 googleMapsUrl 提取，其次為既有 coordinates，再退回名稱推斷
+      const blockBase = (plan.config?.bases || []).find((b) => b.id === block.baseId);
+
+      // 推斷坐標時優先自 googleMapsUrl 提取，其次為既有 coordinates，再退回名稱推斷或基地坐標
       const coords = (block.googleMapsUrl ? inferCoordinates(block.googleMapsUrl) : undefined)
         || block.coordinates 
-        || inferCoordinates(placeName, block.title, destination, false);
-      if (!coords) return;
+        || inferCoordinates(placeName, block.title, destination, false)
+        || blockBase?.coordinates
+        || inferCoordinates(blockBase?.nameZh, blockBase?.name, destination, false)
+        || dayBase?.coordinates
+        || inferCoordinates(dayBase?.nameZh, dayBase?.name, destination, false)
+        || inferCoordinates(destination, undefined, undefined, false)
+        || [47.0502, 8.3093];
 
       const category = inferLocationCategory(block);
       // 以規格化地點名稱作為去重主要 key
@@ -149,6 +158,48 @@ export function extractAllTripLocations(plan: TripPlan): MapLocation[] {
         });
       }
     });
+  });
+
+  // 3. 全面提取待排景點池 (Backlog) 中的活動 TimeBlock (供地理地圖與試算表同步完整展示)
+  (plan.backlog || []).forEach((block, bIdx) => {
+    const placeName = (block.locationName && block.locationName.trim()) 
+      ? block.locationName.trim() 
+      : block.title.trim();
+
+    if (!placeName) return;
+
+    const blockBase = (plan.config?.bases || []).find((b) => b.id === block.baseId);
+
+    const coords = (block.googleMapsUrl ? inferCoordinates(block.googleMapsUrl) : undefined)
+      || block.coordinates 
+      || inferCoordinates(placeName, block.title, destination, false)
+      || blockBase?.coordinates
+      || inferCoordinates(blockBase?.nameZh, blockBase?.name, destination, false)
+      || inferCoordinates(destination, undefined, undefined, false)
+      || [47.0502, 8.3093];
+
+    const category = inferLocationCategory(block);
+    const normalizedKey = `place_${placeName.toLowerCase().replace(/\s+/g, '')}`;
+
+    const existing = visitedNames.get(normalizedKey);
+    if (existing) {
+      if (!existing.googleMapsUrl && block.googleMapsUrl) {
+        existing.googleMapsUrl = block.googleMapsUrl;
+      }
+    } else {
+      visitedNames.set(normalizedKey, {
+        id: block.id || `loc_backlog_${bIdx + 1}`,
+        name: block.locationName || block.title,
+        nameZh: block.locationName || block.title,
+        coordinates: coords,
+        category,
+        altitude: block.altitude,
+        description: block.description || `待排景點靈感：${block.title}`,
+        dayNumbers: [],
+        tags: block.tags,
+        googleMapsUrl: block.googleMapsUrl,
+      });
+    }
   });
 
   // 絕不引入 DEMO_LOCATIONS 或未經行程關聯的舊範本點位

@@ -21,6 +21,25 @@ export const App: React.FC = () => {
     fetchLatestFromSheets();
   }, [fetchLatestFromSheets]);
 
+  // 當使用者在不同裝置編輯並切換回此視窗分頁時，自動靜默拉取最新雲端資料
+  useEffect(() => {
+    let lastPullTime = Date.now();
+    const handleActive = () => {
+      // 至少間隔 10 秒以上才重新觸發拉取，防止頻繁聚焦洗頻
+      if (Date.now() - lastPullTime > 10000 && document.visibilityState === 'visible') {
+        lastPullTime = Date.now();
+        fetchLatestFromSheets();
+      }
+    };
+
+    window.addEventListener('focus', handleActive);
+    document.addEventListener('visibilitychange', handleActive);
+    return () => {
+      window.removeEventListener('focus', handleActive);
+      document.removeEventListener('visibilitychange', handleActive);
+    };
+  }, [fetchLatestFromSheets]);
+
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <AppShell>

@@ -217,8 +217,12 @@ export function moveBlock(
   const nextBlocks = [...targetDay.timeBlocks];
   const safeIdx = Math.max(0, Math.min(nextBlocks.length, toIndex));
 
-  // 放入目標位置
-  nextBlocks.splice(safeIdx, 0, targetBlock);
+  // 放入目標位置 (若活動未設定 baseId，自動繼承該天日程之 baseId)
+  const blockWithBase: TimeBlock = {
+    ...foundBlock,
+    baseId: foundBlock.baseId || targetDay.baseId || undefined,
+  };
+  nextBlocks.splice(safeIdx, 0, blockWithBase);
 
   // 調整該格的時間排程
   const adjustedBlocks = fitIntoSlot(nextBlocks, safeIdx);

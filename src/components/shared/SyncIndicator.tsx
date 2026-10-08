@@ -32,7 +32,18 @@ export const SyncIndicator: React.FC = () => {
   const handleManualSync = async () => {
     setPushResult(null);
     await syncManager.flushQueue();
-    await fetchLatestFromSheets();
+    const ok = await fetchLatestFromSheets();
+    if (ok) {
+      setPushResult({
+        success: true,
+        message: '已從 Google 試算表成功載入最新旅程！包含日程、景點區域與待排池。',
+      });
+    } else {
+      setPushResult({
+        success: false,
+        message: '從雲端拉取失敗，請確認網路連線與 Apps Script 部署權限。',
+      });
+    }
   };
 
   const handleFullPush = async () => {

@@ -828,9 +828,16 @@ export const useTripStore = create<TripStoreState>()(
         set((state) =>
           mutateActive(state, (active) => {
             const normalized = normalizeTimeBlock(block);
+            const targetDay = active.itinerary.find(
+              (d) => d.day === dayNumberOrId || d.id === dayNumberOrId
+            );
+            const blockWithBase = {
+              ...normalized,
+              baseId: normalized.baseId || targetDay?.baseId || undefined,
+            };
             const nextItinerary = active.itinerary.map((d) => {
               if (d.day === dayNumberOrId || d.id === dayNumberOrId) {
-                const blocks = [...d.timeBlocks, normalized];
+                const blocks = [...d.timeBlocks, blockWithBase];
                 return {
                   ...d,
                   timeBlocks: fitIntoSlot(blocks, blocks.length - 1),
@@ -838,7 +845,13 @@ export const useTripStore = create<TripStoreState>()(
               }
               return d;
             });
-            return { itinerary: nextItinerary };
+
+            const nextLocations = extractAllTripLocations({
+              ...active,
+              itinerary: nextItinerary,
+            });
+
+            return { itinerary: nextItinerary, locations: nextLocations };
           })
         );
       },
@@ -863,15 +876,21 @@ export const useTripStore = create<TripStoreState>()(
               }
               return d;
             });
-            return { itinerary: nextItinerary };
+
+            const nextLocations = extractAllTripLocations({
+              ...active,
+              itinerary: nextItinerary,
+            });
+
+            return { itinerary: nextItinerary, locations: nextLocations };
           })
         );
       },
 
       deleteTimeBlock: (dayNumber, blockIndex) => {
         set((state) =>
-          mutateActive(state, (active) => ({
-            itinerary: active.itinerary.map((d) => {
+          mutateActive(state, (active) => {
+            const nextItinerary = active.itinerary.map((d) => {
               if (d.day === dayNumber) {
                 return {
                   ...d,
@@ -879,8 +898,15 @@ export const useTripStore = create<TripStoreState>()(
                 };
               }
               return d;
-            }),
-          }))
+            });
+
+            const nextLocations = extractAllTripLocations({
+              ...active,
+              itinerary: nextItinerary,
+            });
+
+            return { itinerary: nextItinerary, locations: nextLocations };
+          })
         );
       },
 
@@ -905,28 +931,47 @@ export const useTripStore = create<TripStoreState>()(
               return { ...day, timeBlocks: nextBlocks };
             });
 
-            if (foundInDay) {
-              return { itinerary: nextItinerary };
+            let nextBacklog = active.backlog || [];
+            if (!foundInDay) {
+              nextBacklog = nextBacklog.map((b) =>
+                b.id === blockId ? { ...b, ...updates } : b
+              );
             }
 
-            // 若在 backlog
-            const nextBacklog = active.backlog.map((b) =>
-              b.id === blockId ? { ...b, ...updates } : b
-            );
-            return { backlog: nextBacklog };
+            const nextLocations = extractAllTripLocations({
+              ...active,
+              itinerary: nextItinerary,
+              backlog: nextBacklog,
+            });
+
+            return {
+              itinerary: nextItinerary,
+              backlog: nextBacklog,
+              locations: nextLocations,
+            };
           })
         );
       },
 
       deleteTimeBlockById: (blockId) => {
         set((state) =>
-          mutateActive(state, (active) => ({
-            itinerary: active.itinerary.map((day) => ({
+          mutateActive(state, (active) => {
+            const nextItinerary = active.itinerary.map((day) => ({
               ...day,
               timeBlocks: day.timeBlocks.filter((b) => b.id !== blockId),
-            })),
-            backlog: active.backlog.filter((b) => b.id !== blockId),
-          }))
+            }));
+            const nextBacklog = (active.backlog || []).filter((b) => b.id !== blockId);
+            const nextLocations = extractAllTripLocations({
+              ...active,
+              itinerary: nextItinerary,
+              backlog: nextBacklog,
+            });
+            return {
+              itinerary: nextItinerary,
+              backlog: nextBacklog,
+              locations: nextLocations,
+            };
+          })
         );
       },
 
@@ -934,8 +979,14 @@ export const useTripStore = create<TripStoreState>()(
         set((state) =>
           mutateActive(state, (active) => {
             const normalized = normalizeTimeBlock(block);
+            const nextBacklog = [normalized, ...(active.backlog || [])];
+            const nextLocations = extractAllTripLocations({
+              ...active,
+              backlog: nextBacklog,
+            });
             return {
-              backlog: [normalized, ...(active.backlog || [])],
+              backlog: nextBacklog,
+              locations: nextLocations,
             };
           })
         );
@@ -943,9 +994,17 @@ export const useTripStore = create<TripStoreState>()(
 
       deleteBacklogItem: (blockId) => {
         set((state) =>
-          mutateActive(state, (active) => ({
-            backlog: active.backlog.filter((b) => b.id !== blockId),
-          }))
+          mutateActive(state, (active) => {
+            const nextBacklog = (active.backlog || []).filter((b) => b.id !== blockId);
+            const nextLocations = extractAllTripLocations({
+              ...active,
+              backlog: nextBacklog,
+            });
+            return {
+              backlog: nextBacklog,
+              locations: nextLocations,
+            };
+          })
         );
       },
 
@@ -1670,7 +1729,8 @@ export const useTripStore = create<TripStoreState>()(
 
         try {
           const state = get();
-          const activeTrip = state.trips.find((t) => t.id === state.activeTripId) || {
+          const targetTrip = state.trips.find((t) => t.id === state.activeTripId);
+          const baseTripObj = targetTrip || {
             id: state.activeTripId,
             name: state.config.tripName,
             destination: '',
@@ -1688,18 +1748,52 @@ export const useTripStore = create<TripStoreState>()(
             bookmarks: state.bookmarks,
           };
 
+          // 重新萃取最新點位 (包含每日行程活動、待排景點池與真實住宿)，確保 Google Sheets 的 Locations 分頁獲得完整更新
+          const freshLocations = extractAllTripLocations({
+            ...baseTripObj,
+            config: state.config,
+            itinerary: state.itinerary,
+            backlog: state.backlog,
+            accommodations: state.accommodations,
+          });
+
+          // 扁平化附加 lat, lng 以相容 Google 試算表欄位
+          const serializedLocations = freshLocations.map((loc) => ({
+            ...loc,
+            lat: loc.coordinates ? loc.coordinates[0] : undefined,
+            lng: loc.coordinates ? loc.coordinates[1] : undefined,
+          }));
+
+          const activeTrip: TripPlan = {
+            ...baseTripObj,
+            config: state.config,
+            itinerary: state.itinerary,
+            backlog: state.backlog,
+            accommodations: state.accommodations,
+            transports: state.transports,
+            checklist: state.checklist,
+            expenses: state.expenses,
+            locations: serializedLocations,
+          };
+
           // 一次性將整份旅程打包發送給 Google Apps Script (BATCH_SYNC_TRIP)
           const res = await mutateSheet('All', 'BATCH_SYNC_TRIP', { tripData: activeTrip }, activeTrip.id);
 
           if (res.success) {
             const nowIso = new Date().toISOString();
             localStorage.setItem('travel_last_synced_time', nowIso);
+            // 本地 store 同步更新為 freshLocations
+            set((curr) =>
+              mutateActive(curr, () => ({
+                locations: freshLocations,
+              }))
+            );
             // 觸發 syncManager 狀態更新
             syncManager.flushQueue();
 
             return {
               success: true,
-              message: res.message || '已成功將整份行程、住宿、交通與清單發布至 Google 試算表！',
+              message: res.message || '已成功將整份行程、景點、住宿、交通與清單發布至 Google 試算表！',
               stats: res.stats,
             };
           } else {
