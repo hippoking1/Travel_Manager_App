@@ -8,6 +8,7 @@ import {
   useSensor,
   useSensors,
   DragOverlay,
+  useDroppable,
   type DragStartEvent,
   type DragEndEvent,
 } from '@dnd-kit/core';
@@ -38,6 +39,7 @@ import { Button } from '../../ui/Button';
 import { DayStrip } from './DayStrip';
 import { ActivityCard } from './ActivityCard';
 import { ActivityEditor } from './ActivityEditor';
+import { DayBacklogTray } from './DayBacklogTray';
 
 export interface DayTimelineProps {
   days: DayItinerary[];
@@ -85,6 +87,15 @@ export const DayTimeline: React.FC<DayTimelineProps> = ({
   const blockIds = currentDay.timeBlocks.map((b) => b.id || 'unknown');
   const conflictIds = findConflicts(currentDay.timeBlocks);
 
+  // Droppable 區域供活動卡片拖入當天時間軸
+  const { setNodeRef: setTimelineDropRef, isOver: isTimelineOver } = useDroppable({
+    id: `timeline-${containerId}`,
+    data: {
+      type: 'day',
+      containerId,
+    },
+  });
+
   // 依時段分組 (上午 / 下午 / 晚上)
   const morningBlocks = currentDay.timeBlocks.filter((b) => b.period === 'morning');
   const afternoonBlocks = currentDay.timeBlocks.filter((b) => b.period === 'afternoon');
@@ -110,39 +121,66 @@ export const DayTimeline: React.FC<DayTimelineProps> = ({
     if (!over || isFiltered) return;
 
     const blockId = String(active.id);
+    const activeData = active.data.current;
     const overData = over.data.current;
 
-    let targetContainerId: ContainerId = containerId;
+    let targetContainerId: ContainerId | null = null;
     let targetIndex = currentDay.timeBlocks.length;
 
-    // 拖曳到上方 DayStrip 某一天的 chip
+    // 1. 拖曳到上方 DayStrip 某一天的 chip (跨天放置)
     if (overData?.type === 'day' && overData.containerId) {
-      targetContainerId = overData.containerId;
-      const targetDay = days.find((d) => (d.id || String(d.day)) === targetContainerId);
+      const targetDayId: string = overData.containerId;
+      const targetDay = days.find((d) => (d.id || String(d.day)) === targetDayId);
       targetIndex = targetDay ? targetDay.timeBlocks.length : 0;
 
-      moveBlock(blockId, targetContainerId, targetIndex);
-      onSelectDay(targetContainerId);
-      toast(`已將活動移至 ${targetDay?.title || '新日程'}`, {
+      moveBlock(blockId, targetDayId, targetIndex);
+      onSelectDay(targetDayId);
+      toast(`已將活動移至 Day ${targetDay?.day || ''}（${targetDay?.title || '新日程'}）`, {
         action: { label: '復原', onClick: undo },
       });
       return;
     }
 
-    // 拖曳到另一個活動卡片
-    if (overData?.containerId) {
-      targetContainerId = overData.containerId;
+    // 2. 拖曳到另一個活動卡片 (排序)
+    if (overData?.type === 'block') {
+      targetContainerId = overData.containerId || containerId;
       const idx = currentDay.timeBlocks.findIndex((b) => b.id === over.id);
       targetIndex = idx !== -1 ? idx : currentDay.timeBlocks.length;
+    } else {
+      // 拖曳到時間軸容器或空白放置區
+      const matchedDay = days.find(
+        (d) =>
+          (d.id || String(d.day)) === over.id ||
+          (d.id || String(d.day)) === overData?.containerId ||
+          (d.id || String(d.day)) === String(over.id).replace('timeline-', '')
+      );
+      if (matchedDay) {
+        targetContainerId = matchedDay.id || String(matchedDay.day);
+        targetIndex = matchedDay.timeBlocks.length;
+      }
+    }
+
+    if (!targetContainerId) {
+      return;
     }
 
     moveBlock(blockId, targetContainerId, targetIndex);
+    const isFromBacklog = activeData?.containerId === 'backlog';
+    toast(isFromBacklog ? `已將活動排入 Day ${currentDay.day}` : '已調整活動時程', {
+      action: { label: '復原', onClick: undo },
+    });
   };
 
   return (
-    <div className="space-y-4">
-      {/* 頂部水平日期條 (可點選切換亦可作為拖曳放置目標) */}
-      <DayStrip
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="space-y-4">
+        {/* 頂部水平日期條 (可點選切換亦可作為拖曳放置目標) */}
+        <DayStrip
         days={days}
         selectedDayId={containerId}
         onSelectDay={onSelectDay}
@@ -235,112 +273,105 @@ export const DayTimeline: React.FC<DayTimelineProps> = ({
             )}
           </div>
 
-          {/* 活動時間軸 DndContext */}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCorners}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
+          {/* 活動時間軸容器 (Droppable) */}
+          <div
+            ref={setTimelineDropRef}
+            className={`space-y-6 rounded-3xl p-1 transition-all ${
+              isTimelineOver
+                ? 'ring-2 ring-teal-500/50 bg-teal-50/20 dark:bg-teal-950/20'
+                : ''
+            }`}
           >
-            <div className="space-y-6">
-              <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
-                {/* 上午時段 */}
-                {morningBlocks.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-bold text-stone-500 uppercase tracking-wider">
-                      <span className="w-2 h-2 rounded-full bg-amber-400" />
-                      <span>上午日程 ({morningBlocks.length})</span>
-                    </div>
-                    <div className="space-y-2.5">
-                      {morningBlocks.map((block) => (
-                        <ActivityCard
-                          key={block.id || block.title}
-                          block={block}
-                          containerId={containerId}
-                          hasConflict={conflictIds.has(block.id || '')}
-                          disabled={isFiltered}
-                        />
-                      ))}
-                    </div>
+            <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
+              {/* 上午時段 */}
+              {morningBlocks.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-500 uppercase tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                    <span>上午日程 ({morningBlocks.length})</span>
                   </div>
-                )}
-
-                {/* 下午時段 */}
-                {afternoonBlocks.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-bold text-stone-500 uppercase tracking-wider">
-                      <span className="w-2 h-2 rounded-full bg-teal-500" />
-                      <span>下午日程 ({afternoonBlocks.length})</span>
-                    </div>
-                    <div className="space-y-2.5">
-                      {afternoonBlocks.map((block) => (
-                        <ActivityCard
-                          key={block.id || block.title}
-                          block={block}
-                          containerId={containerId}
-                          hasConflict={conflictIds.has(block.id || '')}
-                          disabled={isFiltered}
-                        />
-                      ))}
-                    </div>
+                  <div className="space-y-2.5">
+                    {morningBlocks.map((block) => (
+                      <ActivityCard
+                        key={block.id || block.title}
+                        block={block}
+                        containerId={containerId}
+                        hasConflict={conflictIds.has(block.id || '')}
+                        disabled={isFiltered}
+                      />
+                    ))}
                   </div>
-                )}
-
-                {/* 晚上時段 */}
-                {eveningBlocks.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-bold text-stone-500 uppercase tracking-wider">
-                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                      <span>晚間日程 ({eveningBlocks.length})</span>
-                    </div>
-                    <div className="space-y-2.5">
-                      {eveningBlocks.map((block) => (
-                        <ActivityCard
-                          key={block.id || block.title}
-                          block={block}
-                          containerId={containerId}
-                          hasConflict={conflictIds.has(block.id || '')}
-                          disabled={isFiltered}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {currentDay.timeBlocks.length === 0 && (
-                  <div className="p-8 text-center bg-white dark:bg-stone-900 border border-dashed border-stone-200 dark:border-stone-800 rounded-3xl space-y-2">
-                    <Sparkles className="w-6 h-6 text-stone-300 dark:text-stone-600 mx-auto" />
-                    <h4 className="text-sm font-bold text-stone-700 dark:text-stone-300">
-                      本日尚無安排活動
-                    </h4>
-                    <p className="text-xs text-stone-400">
-                      您可以從待排景點池拖拉卡片進來，或直接點擊「新增活動」。
-                    </p>
-                    <div className="pt-2">
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => setShowAddModal(true)}
-                        icon={<Plus className="w-3.5 h-3.5" />}
-                      >
-                        新增第一個活動
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </SortableContext>
-            </div>
-
-            <DragOverlay>
-              {activeItem && (
-                <ActivityCard
-                  block={activeItem.block}
-                  containerId={activeItem.containerId}
-                  isOverlay
-                />
+                </div>
               )}
-            </DragOverlay>
-          </DndContext>
+
+              {/* 下午時段 */}
+              {afternoonBlocks.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-500 uppercase tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-teal-500" />
+                    <span>下午日程 ({afternoonBlocks.length})</span>
+                  </div>
+                  <div className="space-y-2.5">
+                    {afternoonBlocks.map((block) => (
+                      <ActivityCard
+                        key={block.id || block.title}
+                        block={block}
+                        containerId={containerId}
+                        hasConflict={conflictIds.has(block.id || '')}
+                        disabled={isFiltered}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 晚上時段 */}
+              {eveningBlocks.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-500 uppercase tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                    <span>晚間日程 ({eveningBlocks.length})</span>
+                  </div>
+                  <div className="space-y-2.5">
+                    {eveningBlocks.map((block) => (
+                      <ActivityCard
+                        key={block.id || block.title}
+                        block={block}
+                        containerId={containerId}
+                        hasConflict={conflictIds.has(block.id || '')}
+                        disabled={isFiltered}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {currentDay.timeBlocks.length === 0 && (
+                <div className="p-8 text-center bg-white dark:bg-stone-900 border border-dashed border-stone-200 dark:border-stone-800 rounded-3xl space-y-2">
+                  <Sparkles className="w-6 h-6 text-stone-300 dark:text-stone-600 mx-auto" />
+                  <h4 className="text-sm font-bold text-stone-700 dark:text-stone-300">
+                    本日尚無安排活動
+                  </h4>
+                  <p className="text-xs text-stone-400">
+                    您可以從下方待排景點池拖拉卡片進來，或直接點擊「新增活動」。
+                  </p>
+                  <div className="pt-2">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setShowAddModal(true)}
+                      icon={<Plus className="w-3.5 h-3.5" />}
+                    >
+                      新增第一個活動
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </SortableContext>
+          </div>
+
+          {/* 每日下方：待排景點池快選與拖拉托盤 */}
+          <DayBacklogTray day={currentDay} mode="timeline" disabled={isFiltered} />
 
           {/* 美食與自煮小筆記 */}
           {currentDay.foodNotes && currentDay.foodNotes.length > 0 && (
@@ -413,14 +444,26 @@ export const DayTimeline: React.FC<DayTimelineProps> = ({
           )}
         </div>
 
-      {/* 新增活動 Modal */}
-      {showAddModal && (
-        <ActivityEditor
-          isOpen={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          dayIdOrNumber={containerId}
-        />
-      )}
-    </div>
+        {/* 新增活動 Modal */}
+        {showAddModal && (
+          <ActivityEditor
+            isOpen={showAddModal}
+            onClose={() => setShowAddModal(false)}
+            dayIdOrNumber={containerId}
+          />
+        )}
+
+        {/* 拖曳浮起預覽卡片 */}
+        <DragOverlay>
+          {activeItem && (
+            <ActivityCard
+              block={activeItem.block}
+              containerId={activeItem.containerId}
+              isOverlay
+            />
+          )}
+        </DragOverlay>
+      </div>
+    </DndContext>
   );
 };

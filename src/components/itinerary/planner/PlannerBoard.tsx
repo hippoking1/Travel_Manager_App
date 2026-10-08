@@ -187,23 +187,18 @@ export const PlannerBoard: React.FC<PlannerBoardProps> = ({
       return;
     }
 
-    // 2. 活動拖曳 (Activity Block Moving)
+    // 2. 活動拖曳 (Activity Block Moving，支援跨天與從待排池拖拉)
     if (activeData?.type === 'block') {
       const blockId = String(active.id);
-      let targetContainerId: ContainerId = 'backlog';
+      let targetContainerId: ContainerId | null = null;
       let targetIndex = 0;
 
       if (over.id === 'backlog') {
         targetContainerId = 'backlog';
         targetIndex = 0;
-      } else if (overData?.type === 'day' && overData.containerId) {
-        targetContainerId = overData.containerId;
-        const targetDay = days.find(
-          (d) => (d.id || String(d.day)) === targetContainerId
-        );
-        targetIndex = targetDay ? targetDay.timeBlocks.length : 0;
-      } else if (overData?.containerId) {
-        targetContainerId = overData.containerId;
+      } else if (overData?.type === 'block') {
+        // 放開在某張卡片上 (支援同天或跨天排序)
+        targetContainerId = overData.containerId || 'backlog';
         if (targetContainerId === 'backlog') {
           const bl = useTripStore.getState().backlog;
           const idx = bl.findIndex((b) => b.id === over.id);
@@ -217,10 +212,41 @@ export const PlannerBoard: React.FC<PlannerBoardProps> = ({
             targetIndex = idx !== -1 ? idx : targetDay.timeBlocks.length;
           }
         }
+      } else {
+        // 放開在某天的欄位、天數 header、空白活動放置區或 droppable 上 (跨天放入)
+        const matchedDay = days.find(
+          (d) =>
+            (d.id || String(d.day)) === over.id ||
+            (d.id || String(d.day)) === overData?.containerId ||
+            (d.id || String(d.day)) === String(over.id).replace('droppable-day-', '')
+        );
+
+        if (matchedDay) {
+          targetContainerId = matchedDay.id || String(matchedDay.day);
+          targetIndex = matchedDay.timeBlocks.length;
+        } else if (overData?.containerId) {
+          targetContainerId = overData.containerId;
+          const targetDay = days.find(
+            (d) => (d.id || String(d.day)) === targetContainerId
+          );
+          targetIndex = targetDay ? targetDay.timeBlocks.length : 0;
+        }
+      }
+
+      if (!targetContainerId) {
+        return;
       }
 
       moveBlock(blockId, targetContainerId, targetIndex);
-      toast('已調整活動日程', {
+      const isCrossDay = activeData?.containerId && activeData.containerId !== targetContainerId;
+      const targetDay = days.find((d) => (d.id || String(d.day)) === targetContainerId);
+      const toastMessage = targetContainerId === 'backlog'
+        ? '已將活動移至待排景點池'
+        : isCrossDay
+        ? `已跨天移至 Day ${targetDay?.day || ''}`
+        : '已調整活動日程';
+
+      toast(toastMessage, {
         action: {
           label: '復原',
           onClick: undo,

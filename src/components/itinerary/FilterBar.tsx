@@ -35,7 +35,7 @@ export const FilterBar: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           <span className="text-xs font-bold text-stone-500 uppercase tracking-wider shrink-0 mr-1 hidden md:inline">
-            基地篩選：
+            景點區域：
           </span>
           <button
             type="button"

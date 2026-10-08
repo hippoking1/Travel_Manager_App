@@ -136,6 +136,7 @@ export interface TimeBlock {
   googleMapsUrl?: string;      // Google Maps 連結或座標導航網址
   category?: LocationCategory; // 地圖主分類 (peak | culture | shopping | attraction | station)
   subCategories?: LocationCategory[]; // 地圖次標籤 (高山名峰、歷史文化、超市購物、親子風景)
+  baseId?: string;             // 所屬景點區域 (對應 BaseInfo.id)
 }
 
 /** 景觀交通/地理地圖次標籤設定 */

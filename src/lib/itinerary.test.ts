@@ -196,6 +196,13 @@ describe('itinerary pure functions', () => {
     expect(toBacklog.backlog.length).toBe(1);
     expect(toBacklog.backlog[0].id).toBe('b2');
     expect(toBacklog.backlog[0].startTime).toBeUndefined();
+
+    // Move b2 back from backlog to Day 1
+    const backToDay1 = moveBlock(toBacklog, 'b2', 'd1', 0);
+    expect(backToDay1.backlog.length).toBe(0);
+    expect(backToDay1.itinerary[0].timeBlocks.length).toBe(1);
+    expect(backToDay1.itinerary[0].timeBlocks[0].id).toBe('b2');
+    expect(backToDay1.itinerary[0].timeBlocks[0].startTime).toBeDefined();
   });
 
   it('reorders days and preserves correct day index', () => {

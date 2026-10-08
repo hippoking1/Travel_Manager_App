@@ -22,6 +22,7 @@ import { Input } from '../../ui/Field';
 import { Button } from '../../ui/Button';
 import { ActivityCard } from './ActivityCard';
 import { ActivityEditor } from './ActivityEditor';
+import { DayBacklogTray } from './DayBacklogTray';
 
 export interface DayColumnProps {
   day: DayItinerary;
@@ -60,16 +61,17 @@ export const DayColumn: React.FC<DayColumnProps> = ({
   } = useSortable({
     id: containerId,
     data: {
-      type: 'day',
+      type: 'day-column',
       dayIndex,
       day,
+      containerId,
     },
     disabled,
   });
 
   // Droppable 容器供活動拖進此天
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
-    id: containerId,
+    id: `droppable-day-${containerId}`,
     data: {
       type: 'day',
       containerId,
@@ -254,6 +256,9 @@ export const DayColumn: React.FC<DayColumnProps> = ({
           )}
         </div>
 
+        {/* 每日下方：待排景點池快選與拖拉托盤 */}
+        <DayBacklogTray day={day} mode="board" disabled={disabled} />
+
         {/* 欄位底部按鈕 */}
         <div className="p-2.5 border-t border-stone-200/80 dark:border-stone-800 bg-white/70 dark:bg-stone-900/80 flex items-center justify-between gap-2">
           <Button
@@ -298,7 +303,7 @@ export const DayColumn: React.FC<DayColumnProps> = ({
           <form onSubmit={handleSaveDayInfo} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-stone-600 dark:text-stone-300 mb-1">
-                所屬住宿基地
+                所屬景點區域
               </label>
               <select
                 value={editBaseId}

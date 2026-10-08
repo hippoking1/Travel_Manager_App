@@ -3,7 +3,7 @@ import type { TimeBlock, PersonaTag, TransportType, STPCoverage, LocationCategor
 import { SCENIC_SUB_TAGS } from '../../../types';
 import { extractCoordsFromUrlOrText } from '../../../lib/geo/inferCoordinates';
 import { useTripStore } from '../../../stores/tripStore';
-import { useModules } from '../../../stores/selectors';
+import { useModules, useBases, useItinerary } from '../../../stores/selectors';
 import { hasModule } from '../../../config/modules';
 import { Modal } from '../../ui/Modal';
 import { Input, Textarea, TimeInput, Select } from '../../ui/Field';
@@ -27,10 +27,13 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
 }) => {
   const { addTimeBlock, updateTimeBlockById, addBacklogItem } = useTripStore();
   const modules = useModules();
+  const bases = useBases();
+  const itinerary = useItinerary();
   const isSwiss = hasModule(modules, 'swiss');
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [baseId, setBaseId] = useState('');
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('11:30');
   const [locationName, setLocationName] = useState('');
@@ -49,6 +52,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
     if (initialBlock) {
       setTitle(initialBlock.title || '');
       setDescription(initialBlock.description || '');
+      setBaseId(initialBlock.baseId || '');
       setStartTime(initialBlock.startTime || '09:00');
       setEndTime(initialBlock.endTime || '11:30');
       setLocationName(initialBlock.locationName || '');
@@ -74,6 +78,11 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
     } else {
       setTitle('');
       setDescription('');
+      // 若是針對特定天數新增，自動以該天的 baseId 為預設景點區域
+      const targetDay = dayIdOrNumber !== undefined
+        ? itinerary.find((d) => (d.id || String(d.day)) === String(dayIdOrNumber) || d.day === dayIdOrNumber)
+        : undefined;
+      setBaseId(targetDay?.baseId || '');
       setStartTime('09:00');
       setEndTime('11:30');
       setLocationName('');
@@ -86,7 +95,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
       setTransportType('train');
       setStpCoverage('free');
     }
-  }, [initialBlock, isOpen]);
+  }, [initialBlock, isOpen, dayIdOrNumber, itinerary]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,6 +109,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
     const blockData: Omit<TimeBlock, 'id'> = {
       title: title.trim(),
       description: description.trim(),
+      baseId: baseId || undefined,
       period: 'morning', // 將由 store 依 startTime 自動推導
       startTime: isBacklog ? undefined : startTime,
       endTime: isBacklog ? undefined : endTime,
@@ -196,6 +206,25 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
+
+        {/* 所屬景點區域 */}
+        <div>
+          <label className="block text-xs font-semibold text-stone-600 dark:text-stone-300 mb-1">
+            所屬景點區域
+          </label>
+          <select
+            value={baseId}
+            onChange={(e) => setBaseId(e.target.value)}
+            className="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl px-3 py-2 text-sm text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+          >
+            <option value="">未指定 / 全區通用</option>
+            {bases.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.nameZh} ({b.name})
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* 地點與海拔 */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
