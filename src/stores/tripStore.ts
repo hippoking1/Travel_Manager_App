@@ -93,8 +93,8 @@ export interface TripStoreState {
   resetItineraryToDemo: () => void;
   undo: () => void;
 
-  // 住宿地區 / 基地管理 Actions
-  addBase: (nameZh: string, nameEn?: string) => string;
+  // 景點區域 / 基地管理 Actions
+  addBase: (nameZh: string, nameEn?: string, extra?: Partial<BaseInfo>) => string;
   deleteBase: (baseId: string) => void;
   updateBase: (baseId: string, updates: Partial<BaseInfo>) => void;
 
@@ -968,22 +968,23 @@ export const useTripStore = create<TripStoreState>()(
         set((state) => mutateActive(state, () => snapshotToRestore));
       },
 
-      // 住宿地區 / 基地管理 Actions
-      addBase: (nameZh, nameEn) => {
-        const id = `base_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      // 景點區域 / 基地管理 Actions
+      addBase: (nameZh, nameEn, extra) => {
+        const id = extra?.id || `base_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
         const trimmedZh = nameZh.trim();
         const trimmedEn = (nameEn || trimmedZh).trim();
-        const coords = inferCoordinates(trimmedZh, trimmedEn);
+        const coords = extra?.coordinates || inferCoordinates(trimmedZh, trimmedEn);
 
         const colors = ['#0EA5E9', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#6366F1'];
         const newBase: BaseInfo = {
           id,
           name: trimmedEn,
           nameZh: trimmedZh,
-          days: [],
-          color: colors[Math.floor(Math.random() * colors.length)],
-          hotelName: `${trimmedZh} 住宿飯店`,
+          days: extra?.days || [],
+          color: extra?.color || colors[Math.floor(Math.random() * colors.length)],
+          hotelName: extra?.hotelName || `${trimmedZh} 住宿飯店`,
           coordinates: coords,
+          notes: extra?.notes,
         };
 
         set((state) =>
@@ -1004,11 +1005,20 @@ export const useTripStore = create<TripStoreState>()(
         set((state) =>
           mutateActive(state, (active) => {
             const nextBases = (active.config.bases || []).filter((b) => b.id !== baseId);
+            // 清理行程天數與待排池中已刪除之 baseId 關聯
+            const nextItinerary = active.itinerary.map((d) =>
+              d.baseId === baseId ? { ...d, baseId: '' } : d
+            );
+            const nextBacklog = active.backlog.map((b) =>
+              b.baseId === baseId ? { ...b, baseId: undefined } : b
+            );
             return {
               config: {
                 ...active.config,
                 bases: nextBases,
               },
+              itinerary: nextItinerary,
+              backlog: nextBacklog,
             };
           })
         );
@@ -1345,6 +1355,19 @@ export const useTripStore = create<TripStoreState>()(
                 }
               }
 
+              // 解析 backlog (待排景點池)
+              let backlog: TimeBlock[] = basePlan.backlog || [];
+              if (configMap.backlogJson) {
+                try {
+                  const parsedBacklog = JSON.parse(configMap.backlogJson);
+                  if (Array.isArray(parsedBacklog)) {
+                    backlog = parsedBacklog.map((b: any, idx: number) => normalizeTimeBlock(b, idx));
+                  }
+                } catch (e) {
+                  console.warn('解析 backlogJson 失敗:', e);
+                }
+              }
+
               // 解析 Itinerary (日程景點，依 day 精確去重，杜絕重複行與 64 天問題)
               let itinerary: DayItinerary[] = basePlan.itinerary || [];
               if (tripItinerary.length > 0) {
@@ -1529,6 +1552,7 @@ export const useTripStore = create<TripStoreState>()(
                   },
                 },
                 itinerary,
+                backlog,
                 accommodations,
                 transports,
                 checklist,

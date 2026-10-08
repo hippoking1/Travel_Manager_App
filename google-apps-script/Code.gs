@@ -326,6 +326,9 @@ function doPost(e) {
       } else if (tripData.bases) {
         configItems.push({ key: "basesJson", value: JSON.stringify(tripData.bases) });
       }
+      if (tripData.backlog && Array.isArray(tripData.backlog)) {
+        configItems.push({ key: "backlogJson", value: JSON.stringify(tripData.backlog) });
+      }
       stats.config = syncSheetRows("TripConfig", configItems, function (c) {
         return { key: c.key, value: String(c.value), updatedAt: new Date().toISOString() };
       });

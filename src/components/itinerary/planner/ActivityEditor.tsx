@@ -7,8 +7,10 @@ import { useModules, useBases, useItinerary } from '../../../stores/selectors';
 import { hasModule } from '../../../config/modules';
 import { Modal } from '../../ui/Modal';
 import { Input, Textarea, TimeInput, Select } from '../../ui/Field';
+import { Plus } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { formatTimeSpan } from '../../../lib/itinerary';
+import { QuickAddBaseModal } from '../../shared/QuickAddBaseModal';
 
 export interface ActivityEditorProps {
   isOpen: boolean;
@@ -41,6 +43,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
   const [altitude, setAltitude] = useState('');
   const [tags, setTags] = useState<PersonaTag[]>(['senior-friendly']);
   const [subCategories, setSubCategories] = useState<LocationCategory[]>([]);
+  const [showQuickAddBase, setShowQuickAddBase] = useState(false);
 
   // 交通欄位
   const [transportFrom, setTransportFrom] = useState('');
@@ -157,6 +160,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
   ];
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       onClose={onClose}
@@ -209,9 +213,19 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
 
         {/* 所屬景點區域 */}
         <div>
-          <label className="block text-xs font-semibold text-stone-600 dark:text-stone-300 mb-1">
-            所屬景點區域
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-semibold text-stone-600 dark:text-stone-300">
+              所屬景點區域
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowQuickAddBase(true)}
+              className="text-[11px] font-semibold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+            >
+              <Plus className="w-3 h-3" />
+              <span>新增區域</span>
+            </button>
+          </div>
           <select
             value={baseId}
             onChange={(e) => setBaseId(e.target.value)}
@@ -387,5 +401,14 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
         </div>
       </form>
     </Modal>
+
+    {showQuickAddBase && (
+      <QuickAddBaseModal
+        isOpen={showQuickAddBase}
+        onClose={() => setShowQuickAddBase(false)}
+        onCreated={(newId) => setBaseId(newId)}
+      />
+    )}
+    </>
   );
 };

@@ -12,7 +12,6 @@ import {
   Compass,
   MapPin,
   Users,
-  Home,
   Coins,
   Sparkles,
   Pencil,
@@ -40,12 +39,14 @@ export const SettingsPage: React.FC = () => {
   const {
     config,
     itinerary,
+    backlog,
     trips,
     activeTripId,
     switchTrip,
     deleteTrip,
     duplicateTrip,
     updateConfig,
+    deleteBase,
     setStartDate,
     setTotalDays,
     setModules,
@@ -315,10 +316,11 @@ export const SettingsPage: React.FC = () => {
 
   const handleSaveBase = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!baseName.trim() || !baseNameZh.trim()) return;
+    if (!baseNameZh.trim()) return;
 
     const coords: [number, number] | undefined =
       baseLat && baseLng ? [parseFloat(baseLat), parseFloat(baseLng)] : undefined;
+    const finalEnName = baseName.trim() || baseNameZh.trim();
 
     const list = [...(config.bases || [])];
     if (editingBase) {
@@ -326,7 +328,7 @@ export const SettingsPage: React.FC = () => {
       if (idx !== -1) {
         list[idx] = {
           ...editingBase,
-          name: baseName.trim(),
+          name: finalEnName,
           nameZh: baseNameZh.trim(),
           color: baseColor,
           hotelName: baseHotelName.trim(),
@@ -337,7 +339,7 @@ export const SettingsPage: React.FC = () => {
     } else {
       list.push({
         id: baseId.trim() || `base_${Date.now()}`,
-        name: baseName.trim(),
+        name: finalEnName,
         nameZh: baseNameZh.trim(),
         days: [],
         color: baseColor,
@@ -353,14 +355,13 @@ export const SettingsPage: React.FC = () => {
 
   const handleDeleteBase = async (id: string, nameZh: string) => {
     const ok = await confirm({
-      title: '刪除住宿基地',
-      message: `確定要刪除「${nameZh}」基地嗎？若有行程綁定於此基地，建議先重新分配。`,
+      title: '刪除景點區域',
+      message: `確定要刪除「${nameZh}」區域嗎？若有行程或待排景點綁定於此區域，關聯將會自動清除。`,
       confirmLabel: '確認刪除',
       danger: true,
     });
     if (ok) {
-      const list = (config.bases || []).filter((b) => b.id !== id);
-      updateConfig({ bases: list });
+      deleteBase(id);
     }
   };
 
@@ -385,7 +386,7 @@ export const SettingsPage: React.FC = () => {
         {[
           { key: 'general', label: '基本與日程', icon: Calendar },
           { key: 'travelers', label: '同行成員', icon: Users, count: config.travelers?.length },
-          { key: 'bases', label: '住宿基地', icon: Home, count: config.bases?.length },
+          { key: 'bases', label: '景點區域', icon: MapPin, count: config.bases?.length },
           { key: 'currencies', label: '幣別匯率', icon: Coins },
           { key: 'sync', label: '雲端同步', icon: Cloud },
           { key: 'trips', label: '所有旅程', icon: Compass, count: trips.length },
@@ -651,93 +652,126 @@ export const SettingsPage: React.FC = () => {
         </Card>
       )}
 
-      {/* Tab 3: 住宿基地 */}
+      {/* Tab 3: 景點區域 */}
       {activeTab === 'bases' && (
         <Card className="p-5 sm:p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3">
             <div>
               <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
-                <Home className="w-4 h-4 text-[var(--color-primary)]" />
-                <span>住宿基地與地理中心 ({config.bases?.length || 0} 個)</span>
+                <MapPin className="w-4 h-4 text-[var(--color-primary)]" />
+                <span>景點區域與地理中心 ({config.bases?.length || 0} 個)</span>
               </h3>
               <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                設定各城市停留基地，輸入地理坐標可供氣象預報與地圖導覽自動定位。
+                自訂旅程劃分的景點區域（如城市、城鎮或活動區塊），供日程分配、景點池篩選、氣象預報與地圖自動定位。
               </p>
             </div>
             <Button type="button" variant="primary" onClick={handleOpenAddBase}>
               <Plus className="w-4 h-4 mr-1.5" />
-              <span>新增基地</span>
+              <span>新增區域</span>
             </Button>
           </div>
 
           {(config.bases || []).length === 0 ? (
             <EmptyState
-              title="尚未建立任何住宿基地"
-              description="點擊「新增基地」建立第一個城市或飯店據點。"
+              title="尚未建立任何景點區域"
+              description="點擊「新增區域」建立第一個城市、城鎮或活動據點。"
             />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {config.bases.map((b) => (
-                <div
-                  key={b.id}
-                  className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] flex flex-col justify-between gap-3 hover:border-[var(--color-primary)]/40 transition-colors"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-3 h-3 rounded-full shrink-0"
-                          style={{ backgroundColor: b.color || '#0EA5E9' }}
-                        />
-                        <h4 className="font-bold text-sm text-[var(--color-text)]">
-                          {b.nameZh} ({b.name})
-                        </h4>
+              {config.bases.map((b) => {
+                const assignedDays = (itinerary || [])
+                  .filter((d) => d.baseId === b.id)
+                  .map((d) => `Day ${d.day}`);
+                const backlogCount = (backlog || []).filter((item) => item.baseId === b.id).length;
+
+                return (
+                  <div
+                    key={b.id}
+                    className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] flex flex-col justify-between gap-3 hover:border-[var(--color-primary)]/40 transition-colors"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
+                            style={{ backgroundColor: b.color || '#0EA5E9' }}
+                          />
+                          <h4 className="font-bold text-sm text-[var(--color-text)]">
+                            {b.nameZh}{' '}
+                            {b.name && b.name !== b.nameZh && (
+                              <span className="text-xs text-[var(--color-text-muted)] font-normal">
+                                ({b.name})
+                              </span>
+                            )}
+                          </h4>
+                        </div>
+                        <span className="text-[10px] text-[var(--color-text-muted)] font-mono">
+                          ID: {b.id}
+                        </span>
                       </div>
-                      <span className="text-[10px] text-[var(--color-text-muted)] font-mono">
-                        ID: {b.id}
-                      </span>
+
+                      {/* 關聯統計標籤 */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        {assignedDays.length > 0 ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-medium">
+                            🗓️ {assignedDays.join(', ')}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-[var(--color-bg-subtle)] text-[var(--color-text-muted)]">
+                            未綁定日程天數
+                          </span>
+                        )}
+
+                        {backlogCount > 0 && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">
+                            📌 待排景點 {backlogCount} 個
+                          </span>
+                        )}
+                      </div>
+
+                      {b.hotelName && (
+                        <p className="text-xs text-[var(--color-text)] font-medium">
+                          住宿/地標: {b.hotelName}
+                        </p>
+                      )}
+
+                      {b.coordinates && (
+                        <p className="text-[11px] text-[var(--color-text-muted)] font-mono flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-[var(--color-primary)]" />
+                          <span>
+                            [{b.coordinates[0].toFixed(4)}, {b.coordinates[1].toFixed(4)}]
+                          </span>
+                        </p>
+                      )}
+
+                      {b.notes && (
+                        <p className="text-xs text-[var(--color-text-muted)] line-clamp-2">
+                          {b.notes}
+                        </p>
+                      )}
                     </div>
 
-                    <p className="text-xs text-[var(--color-text)] font-medium">
-                      飯店: {b.hotelName || '尚未指定'}
-                    </p>
-
-                    {b.coordinates && (
-                      <p className="text-[11px] text-[var(--color-text-muted)] font-mono flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-[var(--color-primary)]" />
-                        <span>
-                          [{b.coordinates[0].toFixed(4)}, {b.coordinates[1].toFixed(4)}]
-                        </span>
-                      </p>
-                    )}
-
-                    {b.notes && (
-                      <p className="text-xs text-[var(--color-text-muted)] line-clamp-2">
-                        {b.notes}
-                      </p>
-                    )}
+                    <div className="flex justify-end gap-1 pt-2 border-t border-[var(--color-border)]">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditBase(b)}
+                        className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-primary)] rounded-lg hover:bg-[var(--color-bg-subtle)]"
+                        title="編輯區域"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteBase(b.id, b.nameZh)}
+                        className="p-1.5 text-[var(--color-text-muted)] hover:text-red-500 rounded-lg hover:bg-red-500/10"
+                        title="刪除區域"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="flex justify-end gap-1 pt-2 border-t border-[var(--color-border)]">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditBase(b)}
-                      className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-primary)] rounded-lg hover:bg-[var(--color-bg-subtle)]"
-                      title="編輯基地"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteBase(b.id, b.nameZh)}
-                      className="p-1.5 text-[var(--color-text-muted)] hover:text-red-500 rounded-lg hover:bg-red-500/10"
-                      title="刪除基地"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
@@ -1118,23 +1152,23 @@ export const SettingsPage: React.FC = () => {
         </Modal>
       )}
 
-      {/* 基地 Modal */}
+      {/* 景點區域 Modal */}
       {showBaseModal && (
         <Modal
           isOpen={true}
           onClose={() => setShowBaseModal(false)}
-          title={editingBase ? '編輯住宿基地' : '新增住宿基地'}
+          title={editingBase ? '編輯景點區域' : '新增景點區域'}
         >
           <form onSubmit={handleSaveBase} className="space-y-4">
             <div className="grid grid-cols-2 gap-2">
               <Input
-                label="基地代碼 (ID)"
+                label="區域代碼 (ID)"
                 type="text"
                 required
                 disabled={!!editingBase}
                 value={baseId}
                 onChange={(e) => setBaseId(e.target.value)}
-                placeholder="例如: tokyo, luzern"
+                placeholder="例如: luzern, tokyo"
               />
               <Input
                 label="代表色票 (HEX)"
@@ -1146,29 +1180,28 @@ export const SettingsPage: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-2">
               <Input
-                label="英文名稱"
-                type="text"
-                required
-                value={baseName}
-                onChange={(e) => setBaseName(e.target.value)}
-                placeholder="例如: Luzern"
-              />
-              <Input
-                label="中文名稱"
+                label="區域中文名稱"
                 type="text"
                 required
                 value={baseNameZh}
                 onChange={(e) => setBaseNameZh(e.target.value)}
                 placeholder="例如: 琉森"
               />
+              <Input
+                label="外文 / 英文名稱 (選填)"
+                type="text"
+                value={baseName}
+                onChange={(e) => setBaseName(e.target.value)}
+                placeholder="例如: Luzern"
+              />
             </div>
 
             <Input
-              label="主要飯店 / 公寓名稱"
+              label="核心地標 / 住宿飯店 (選填)"
               type="text"
               value={baseHotelName}
               onChange={(e) => setBaseHotelName(e.target.value)}
-              placeholder="例如: Lakeside Family Apartment"
+              placeholder="例如: Luzern Bahnhof、Lakeside Apartment"
             />
 
             <div className="grid grid-cols-2 gap-2">
@@ -1203,7 +1236,7 @@ export const SettingsPage: React.FC = () => {
                 取消
               </Button>
               <Button type="submit" variant="primary">
-                儲存基地
+                儲存區域
               </Button>
             </div>
           </form>

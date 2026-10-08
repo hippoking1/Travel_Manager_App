@@ -23,6 +23,7 @@ import { Button } from '../../ui/Button';
 import { ActivityCard } from './ActivityCard';
 import { ActivityEditor } from './ActivityEditor';
 import { DayBacklogTray } from './DayBacklogTray';
+import { QuickAddBaseModal } from '../../shared/QuickAddBaseModal';
 
 export interface DayColumnProps {
   day: DayItinerary;
@@ -45,6 +46,7 @@ export const DayColumn: React.FC<DayColumnProps> = ({
   const [editTitle, setEditTitle] = useState(day.title);
   const [editSubtitle, setEditSubtitle] = useState(day.subtitle);
   const [editBaseId, setEditBaseId] = useState(day.baseId);
+  const [showQuickAddBase, setShowQuickAddBase] = useState(false);
 
   const containerId = day.id || String(day.day);
   const base = bases.find((b) => b.id === day.baseId);
@@ -302,9 +304,19 @@ export const DayColumn: React.FC<DayColumnProps> = ({
         >
           <form onSubmit={handleSaveDayInfo} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-stone-600 dark:text-stone-300 mb-1">
-                所屬景點區域
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-stone-600 dark:text-stone-300">
+                  所屬景點區域
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickAddBase(true)}
+                  className="text-[11px] font-semibold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>新增區域</span>
+                </button>
+              </div>
               <select
                 value={editBaseId}
                 onChange={(e) => setEditBaseId(e.target.value)}
@@ -341,6 +353,14 @@ export const DayColumn: React.FC<DayColumnProps> = ({
             </div>
           </form>
         </Modal>
+      )}
+
+      {showQuickAddBase && (
+        <QuickAddBaseModal
+          isOpen={showQuickAddBase}
+          onClose={() => setShowQuickAddBase(false)}
+          onCreated={(newId) => setEditBaseId(newId)}
+        />
       )}
     </>
   );

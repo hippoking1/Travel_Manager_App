@@ -68,7 +68,10 @@ export async function fetchFromSheet<T = unknown>(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error(`Google 試算表伺服器回傳 HTTP ${response.status} (${response.statusText})`);
+      if (response.status === 404) {
+        throw new Error('Google 試算表伺服器回傳 HTTP 404 (找不到網頁)。請至 Google Apps Script 確認已建立「新版本」部署、存取權限設為「所有人 (Anyone)」，且 Web App URL 無誤。');
+      }
+      throw new Error(`Google 試算表伺服器回傳 HTTP ${response.status} (${response.statusText || '連線錯誤'})`);
     }
 
     const rawText = await response.text();
@@ -140,7 +143,10 @@ export async function mutateSheet(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error(`Google 試算表伺服器回傳 HTTP ${response.status} (${response.statusText})`);
+      if (response.status === 404) {
+        throw new Error('Google 試算表伺服器回傳 HTTP 404 (找不到網頁)。請至 Google Apps Script 確認已建立「新版本」部署、存取權限設為「所有人 (Anyone)」，且下方 Web App URL 為最新完整網址。');
+      }
+      throw new Error(`Google 試算表伺服器回傳 HTTP ${response.status} (${response.statusText || '連線錯誤'})`);
     }
 
     const rawText = await response.text();
