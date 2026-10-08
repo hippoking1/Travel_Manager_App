@@ -79,3 +79,47 @@ export function getZermattSunriseTime(startDate: string | null | undefined): str
     return '05:30 AM';
   }
 }
+
+/**
+ * 將各種日期格式（包含 ISO 8601、Date、包含時間或時區後綴的字串）標準化為純 YYYY-MM-DD
+ * 特別處理 Google Apps Script 讀取 Date 產生的 UTC 偏移問題（例如 2027-07-09T16:00:00.000Z 應為 2027-07-10）
+ */
+export function normalizeDateString(dateVal: unknown): string {
+  if (!dateVal) return '';
+  const str = String(dateVal).trim();
+  if (!str) return '';
+
+  // 已經是標準 YYYY-MM-DD 格式
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+
+  // 包含時間戳或 ISO 格式 (e.g. 2027-07-09T16:00:00.000Z 或 2027-07-10T00:00:00)
+  if (str.includes('T') || str.includes('Z')) {
+    try {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        // 利用本機時區提取年月日（自動修正因 UTC 產生的少一天偏移）
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      }
+    } catch {}
+    return str.split('T')[0] || '';
+  }
+
+  // 處理 / 分隔的日期 (e.g. 2027/7/10 -> 2027-07-10)
+  if (str.includes('/')) {
+    const parts = str.split('/');
+    if (parts.length === 3) {
+      const y = parts[0].padStart(4, '0');
+      const m = parts[1].padStart(2, '0');
+      const d = parts[2].padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  return str;
+}
+

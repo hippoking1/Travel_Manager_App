@@ -18,6 +18,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { parseISO, differenceInDays } from 'date-fns';
+import { normalizeDateString } from '../../utils/dates';
 import type { AccommodationBooking, TransportBooking } from '../../types';
 import { useTripStore } from '../../stores/tripStore';
 import { useActiveTrip, useBases, useConfig } from '../../stores/selectors';
@@ -109,8 +110,8 @@ export const BookingsPage: React.FC = () => {
       setAccBaseId(item.baseId);
       setAccHotelName(item.hotelName);
       setAccRoomType(item.roomType);
-      setAccCheckIn(item.checkInDate);
-      setAccCheckOut(item.checkOutDate);
+      setAccCheckIn(normalizeDateString(item.checkInDate));
+      setAccCheckOut(normalizeDateString(item.checkOutDate));
       setAccPlatform(item.bookingPlatform);
       setAccCode(item.confirmationCode);
       setAccPrice(item.totalPrice);
@@ -129,7 +130,7 @@ export const BookingsPage: React.FC = () => {
       setAccBaseId(bases[0]?.id || 'base-1');
       setAccHotelName('');
       setAccRoomType('標準雙人房 / 家庭公寓');
-      setAccCheckIn(config.startDate || '');
+      setAccCheckIn(normalizeDateString(config.startDate || ''));
       setAccCheckOut('');
       setAccPlatform('Booking.com');
       setAccCode('');
@@ -194,10 +195,12 @@ export const BookingsPage: React.FC = () => {
     e.preventDefault();
     if (!accHotelName.trim()) return;
 
+    const cleanIn = normalizeDateString(accCheckIn);
+    const cleanOut = normalizeDateString(accCheckOut);
     let nights = 1;
-    if (accCheckIn && accCheckOut) {
+    if (cleanIn && cleanOut) {
       try {
-        const diff = differenceInDays(parseISO(accCheckOut), parseISO(accCheckIn));
+        const diff = differenceInDays(parseISO(cleanOut), parseISO(cleanIn));
         nights = Math.max(1, diff);
       } catch {
         nights = 1;
@@ -219,8 +222,8 @@ export const BookingsPage: React.FC = () => {
       baseNameZh,
       hotelName: accHotelName.trim(),
       roomType: accRoomType.trim(),
-      checkInDate: accCheckIn,
-      checkOutDate: accCheckOut,
+      checkInDate: cleanIn,
+      checkOutDate: cleanOut,
       nights,
       bookingPlatform: accPlatform.trim(),
       confirmationCode: accCode.trim(),
@@ -439,7 +442,7 @@ export const BookingsPage: React.FC = () => {
                     <div className="flex items-center gap-4 text-xs text-stone-500 dark:text-stone-400 flex-wrap pt-1 font-mono">
                       <span className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-teal-600" />
-                        <span>入住: {acc.checkInDate} ➔ 退房: {acc.checkOutDate} ({acc.nights} 晚)</span>
+                        <span>入住: {normalizeDateString(acc.checkInDate)} ➔ 退房: {normalizeDateString(acc.checkOutDate)} ({acc.nights} 晚)</span>
                       </span>
 
                       {acc.totalPrice > 0 && (
@@ -820,14 +823,14 @@ export const BookingsPage: React.FC = () => {
               <Input
                 type="date"
                 label="入住日期"
-                value={accCheckIn}
+                value={normalizeDateString(accCheckIn)}
                 onChange={(e) => setAccCheckIn(e.target.value)}
                 required
               />
               <Input
                 type="date"
                 label="退房日期"
-                value={accCheckOut}
+                value={normalizeDateString(accCheckOut)}
                 onChange={(e) => setAccCheckOut(e.target.value)}
                 required
               />

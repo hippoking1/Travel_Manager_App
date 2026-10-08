@@ -40,6 +40,7 @@ import {
   type MergeResult 
 } from '../lib/tripImport';
 import { inferCoordinates, extractAllTripLocations } from '../lib/geo';
+import { normalizeDateString } from '../utils/dates';
 
 export interface TripStoreState {
   // 多場旅遊計畫管理 (Multi-Trip Management)
@@ -1282,7 +1283,7 @@ export const useTripStore = create<TripStoreState>()(
               const basePlan = baseTrip || state.trips.find((t) => t.id === tId) || INITIAL_SWISS_TRIP;
               const name = configMap.tripName || basePlan.name || '雲端同步旅程';
               const destination = configMap.destination || basePlan.destination || '';
-              const startDate = configMap.startDate || basePlan.config?.startDate || null;
+              const startDate = configMap.startDate ? normalizeDateString(configMap.startDate) : (basePlan.config?.startDate || null);
               const primaryCurrency = configMap.primaryCurrency || basePlan.config?.currencies?.primary || 'TWD';
 
               // 解析 bases (自訂住宿基地)
@@ -1379,8 +1380,8 @@ export const useTripStore = create<TripStoreState>()(
                   baseNameZh: String(acc.baseNameZh || ''),
                   hotelName: String(acc.hotelName || ''),
                   roomType: String(acc.roomType || ''),
-                  checkInDate: String(acc.checkInDate || ''),
-                  checkOutDate: String(acc.checkOutDate || ''),
+                  checkInDate: normalizeDateString(acc.checkInDate),
+                  checkOutDate: normalizeDateString(acc.checkOutDate),
                   nights: Number(acc.nights) || 1,
                   bookingPlatform: String(acc.bookingPlatform || ''),
                   confirmationCode: String(acc.confirmationCode || ''),
@@ -1523,19 +1524,38 @@ export const useTripStore = create<TripStoreState>()(
               return plan;
             }
 
-            // 更新或追加所有雲端識別出的 trips
-            const tripIdsToSync = remoteTripIds.length > 0 ? remoteTripIds : [targetTripId];
-            let nextTrips = [...state.trips];
+            // 雲端同步模式：以雲端識別的 trips 構建有效旅程清單，自動掃除已被雲端刪除的孤兒/同名副本
+            let nextTrips: TripPlan[] = [];
 
-            tripIdsToSync.forEach((tId) => {
-              const existingIdx = nextTrips.findIndex((t) => t.id === tId);
-              const built = buildTripPlanFromRemote(tId, existingIdx !== -1 ? nextTrips[existingIdx] : undefined);
+            if (remoteTripIds.length > 0) {
+              // 1. 先構建所有雲端真實存在的 trips
+              nextTrips = remoteTripIds.map((tId) => {
+                const existing = state.trips.find((t) => t.id === tId);
+                return buildTripPlanFromRemote(tId, existing);
+              });
+
+              // 2. 檢查本地端是否有「未同步且非重複」的全新草稿（例如本地剛點擊「+ 新旅程」建立且名字與雲端不衝突者）
+              state.trips.forEach((localTrip) => {
+                const isRemote = remoteTripIds.includes(localTrip.id);
+                const isDuplicateName = nextTrips.some(
+                  (rt) => rt.name.trim() === localTrip.name.trim() && localTrip.name.trim().length > 0
+                );
+                // 排除已在雲端刪除之同名副本或無效舊資料
+                if (!isRemote && !isDuplicateName && localTrip.id !== DEFAULT_SWISS_TRIP_ID) {
+                  nextTrips.push(localTrip);
+                }
+              });
+            } else {
+              // 雲端無明確 ID 標籤時，更新當前 targetTripId
+              const existingIdx = state.trips.findIndex((t) => t.id === targetTripId);
+              const built = buildTripPlanFromRemote(targetTripId, existingIdx !== -1 ? state.trips[existingIdx] : undefined);
+              nextTrips = [...state.trips];
               if (existingIdx !== -1) {
                 nextTrips[existingIdx] = built;
               } else {
                 nextTrips.push(built);
               }
-            });
+            }
 
             const activePlan = nextTrips.find((t) => t.id === targetTripId) || nextTrips[0];
 

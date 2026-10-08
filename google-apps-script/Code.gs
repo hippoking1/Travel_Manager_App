@@ -547,6 +547,15 @@ function sheetToObjects(sheet) {
       var key = String(headers[j]).trim();
       if (key) {
         var val = data[i][j];
+        // 若儲存格值為 Date 物件，轉為 yyyy-MM-dd 字串，防止 JSON.stringify 產生 UTC 偏差 ISO 字串 (如 2027-07-09T16:00:00.000Z)
+        if (Object.prototype.toString.call(val) === "[object Date]" || val instanceof Date) {
+          try {
+            var tz = sheet.getParent().getSpreadsheetTimeZone() || Session.getScriptTimeZone() || "Asia/Taipei";
+            val = Utilities.formatDate(val, tz, "yyyy-MM-dd");
+          } catch (dateErr) {
+            val = Utilities.formatDate(val, "GMT+8", "yyyy-MM-dd");
+          }
+        }
         obj[key] = val;
         if (val !== "" && val !== null && val !== undefined) {
           hasContent = true;

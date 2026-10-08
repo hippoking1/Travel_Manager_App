@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { ChevronDown, Plus, Check, Settings, Compass } from 'lucide-react';
+import { ChevronDown, Plus, Check, Settings, Compass, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTripStore } from '../../stores/tripStore';
 import { useActiveTrip } from '../../stores/selectors';
 import { Popover } from '../ui/Popover';
+import { useConfirm } from '../ui/ConfirmDialog';
 import { NewTripModal } from './NewTripModal';
 
 export const TripSwitcher: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
-  const { trips, activeTripId, switchTrip } = useTripStore();
+  const { trips, activeTripId, switchTrip, deleteTrip } = useTripStore();
   const activeTrip = useActiveTrip();
+  const confirm = useConfirm();
   const [showNewModal, setShowNewModal] = useState(false);
 
   const totalDays = activeTrip.config?.totalDays || activeTrip.itinerary?.length || 1;
@@ -79,20 +81,22 @@ export const TripSwitcher: React.FC<{ compact?: boolean }> = ({ compact = false 
                 const isActive = trip.id === activeTripId;
                 const days = trip.config?.totalDays || trip.itinerary?.length || 1;
                 return (
-                  <button
+                  <div
                     key={trip.id}
-                    type="button"
-                    onClick={() => {
-                      switchTrip(trip.id);
-                      close();
-                    }}
-                    className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all cursor-pointer ${
+                    className={`w-full flex items-center justify-between p-1.5 sm:p-2 rounded-xl transition-all ${
                       isActive
                         ? 'bg-teal-50 dark:bg-teal-950/40 border border-teal-500/30 text-stone-900 dark:text-stone-100 font-medium'
                         : 'hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        switchTrip(trip.id);
+                        close();
+                      }}
+                      className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer"
+                    >
                       <span className="text-lg shrink-0 p-1 rounded-lg bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700">
                         {trip.coverEmoji || '✈️'}
                       </span>
@@ -108,14 +112,38 @@ export const TripSwitcher: React.FC<{ compact?: boolean }> = ({ compact = false 
                           <span className="font-mono">{days} 天</span>
                         </div>
                       </div>
-                    </div>
+                    </button>
 
-                    {isActive && (
-                      <div className="w-4 h-4 rounded-full bg-teal-600 dark:bg-teal-500 flex items-center justify-center shrink-0 text-white dark:text-stone-950">
-                        <Check className="w-2.5 h-2.5 stroke-[3]" />
-                      </div>
-                    )}
-                  </button>
+                    <div className="flex items-center gap-1 shrink-0 ml-1.5">
+                      {isActive && (
+                        <div className="w-4 h-4 rounded-full bg-teal-600 dark:bg-teal-500 flex items-center justify-center shrink-0 text-white dark:text-stone-950">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </div>
+                      )}
+
+                      {trips.length > 1 && (
+                        <button
+                          type="button"
+                          title="刪除此旅程"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const ok = await confirm({
+                              title: '刪除旅遊計畫',
+                              message: `確定要刪除「${trip.name}」嗎？若已綁定雲端，將同步清除 Google 試算表對應資料。`,
+                              confirmLabel: '確認刪除',
+                              danger: true,
+                            });
+                            if (ok) {
+                              deleteTrip(trip.id);
+                            }
+                          }}
+                          className="p-1 text-stone-300 hover:text-rose-500 dark:text-stone-600 dark:hover:text-rose-400 hover:bg-stone-200/60 dark:hover:bg-stone-700 rounded-md transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>
