@@ -27,7 +27,9 @@ import {
   Backpack, 
   AlertCircle,
   Sparkles,
-  Inbox
+  Inbox,
+  Edit2,
+  Trash2
 } from 'lucide-react';
 import type { DayItinerary, TimeBlock, ContainerId } from '../../../types';
 import { useTripStore } from '../../../stores/tripStore';
@@ -36,10 +38,14 @@ import { formatDayDate } from '../../../utils/dates';
 import { findConflicts } from '../../../lib/itinerary';
 import { toast } from '../../ui/Toast';
 import { Button } from '../../ui/Button';
+import { Modal } from '../../ui/Modal';
+import { Input } from '../../ui/Field';
+import { QuickAddBaseModal } from '../../shared/QuickAddBaseModal';
 import { DayStrip } from './DayStrip';
 import { ActivityCard } from './ActivityCard';
 import { ActivityEditor } from './ActivityEditor';
 import { DayBacklogTray } from './DayBacklogTray';
+import { DeleteDayModal } from './DeleteDayModal';
 
 export interface DayTimelineProps {
   days: DayItinerary[];
@@ -58,14 +64,69 @@ export const DayTimeline: React.FC<DayTimelineProps> = ({
   const config = useConfig();
   const bases = useBases();
   const backlog = useBacklog();
-  const { moveBlock, reflowDay, undo } = useTripStore();
+  const { moveBlock, reflowDay, undo, addDay, deleteDay, updateDay } = useTripStore();
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditDayModal, setShowEditDayModal] = useState(false);
+  const [showDeleteDayModal, setShowDeleteDayModal] = useState(false);
+  const [showQuickAddBase, setShowQuickAddBase] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editSubtitle, setEditSubtitle] = useState('');
+  const [editBaseId, setEditBaseId] = useState('');
+
   const [activeItem, setActiveItem] = useState<{
     id: string;
     block: TimeBlock;
     containerId: ContainerId;
   } | null>(null);
+
+  const handleAddDay = () => {
+    const newDayId = addDay(currentDay?.baseId);
+    onSelectDay(newDayId);
+    toast.success(`已成功新增第 ${days.length + 1} 天行程！`);
+  };
+
+  const handleRequestDeleteDay = () => {
+    if (days.length <= 1) {
+      toast.error('旅程至少需保留 1 天日程，無法刪除最後一天。');
+      return;
+    }
+    setShowDeleteDayModal(true);
+  };
+
+  const handleConfirmDeleteDay = (options: { moveToBacklog: boolean }) => {
+    const currentIndex = days.findIndex(
+      (d) => (d.id || String(d.day)) === containerId
+    );
+    const nextTarget =
+      days[currentIndex - 1] || days[currentIndex + 1] || days[0];
+
+    deleteDay(containerId, options);
+    setShowDeleteDayModal(false);
+
+    if (options.moveToBacklog) {
+      toast.success(
+        `已將 Day ${currentDay.day} 的 ${currentDay.timeBlocks.length} 個活動移入景點池，並刪除該日。`
+      );
+    } else {
+      toast.success(`已刪除 Day ${currentDay.day} 及其排程活動。`);
+    }
+
+    if (nextTarget && (nextTarget.id || String(nextTarget.day)) !== containerId) {
+      onSelectDay(nextTarget.id || String(nextTarget.day));
+    }
+  };
+
+  const handleSaveDayInfo = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateDay(containerId, {
+      title: editTitle.trim(),
+      subtitle: editSubtitle.trim() || undefined,
+      baseId: editBaseId || undefined,
+    });
+    setShowEditDayModal(false);
+    toast.success('已更新當天資訊');
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -181,10 +242,11 @@ export const DayTimeline: React.FC<DayTimelineProps> = ({
       <div className="space-y-4">
         {/* 頂部水平日期條 (可點選切換亦可作為拖曳放置目標) */}
         <DayStrip
-        days={days}
-        selectedDayId={containerId}
-        onSelectDay={onSelectDay}
-      />
+          days={days}
+          selectedDayId={containerId}
+          onSelectDay={onSelectDay}
+          onAddDay={handleAddDay}
+        />
 
       {/* 篩選提示 */}
       {isFiltered && (
@@ -245,6 +307,31 @@ export const DayTimeline: React.FC<DayTimelineProps> = ({
                 className="text-xs"
               >
                 自動排時程
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setEditTitle(currentDay.title);
+                  setEditSubtitle(currentDay.subtitle || '');
+                  setEditBaseId(currentDay.baseId || '');
+                  setShowEditDayModal(true);
+                }}
+                icon={<Edit2 className="w-3.5 h-3.5 text-stone-500" />}
+                className="text-xs"
+                title="編輯當天標題、路線副標與景點區域"
+              >
+                編輯當天
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRequestDeleteDay}
+                icon={<Trash2 className="w-3.5 h-3.5 text-red-500" />}
+                className="text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900/50"
+                title="刪除此天日程"
+              >
+                刪除此天
               </Button>
               <Button
                 variant="primary"
@@ -450,6 +537,88 @@ export const DayTimeline: React.FC<DayTimelineProps> = ({
             isOpen={showAddModal}
             onClose={() => setShowAddModal(false)}
             dayIdOrNumber={containerId}
+          />
+        )}
+
+        {/* 刪除天數 Modal (活動移至景點池或直接刪除) */}
+        {showDeleteDayModal && (
+          <DeleteDayModal
+            isOpen={showDeleteDayModal}
+            onClose={() => setShowDeleteDayModal(false)}
+            day={currentDay}
+            onConfirm={handleConfirmDeleteDay}
+          />
+        )}
+
+        {/* 編輯當天標題與景點區域 Modal */}
+        {showEditDayModal && (
+          <Modal
+            isOpen={showEditDayModal}
+            onClose={() => setShowEditDayModal(false)}
+            title={`編輯 Day ${currentDay.day} 資訊`}
+          >
+            <form onSubmit={handleSaveDayInfo} className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-stone-600 dark:text-stone-300">
+                    所屬景點區域
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickAddBase(true)}
+                    className="text-[11px] font-semibold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>新增區域</span>
+                  </button>
+                </div>
+                <select
+                  value={editBaseId}
+                  onChange={(e) => setEditBaseId(e.target.value)}
+                  className="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl px-3 py-2 text-sm text-stone-900 dark:text-stone-100"
+                >
+                  <option value="">未指定 / 全區通用</option>
+                  {bases.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.nameZh} {b.name && b.name !== b.nameZh ? `(${b.name})` : ''}
+                    </option>
+                  ))}
+                  {editBaseId && !bases.some((b) => b.id === editBaseId) && (
+                    <option value={editBaseId}>{editBaseId} (自訂/同步區域)</option>
+                  )}
+                </select>
+              </div>
+
+              <Input
+                label="當天主要標題"
+                required
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+              />
+
+              <Input
+                label="副標題 / 重點路線"
+                value={editSubtitle}
+                onChange={(e) => setEditSubtitle(e.target.value)}
+              />
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-stone-100 dark:border-stone-800">
+                <Button type="button" variant="ghost" onClick={() => setShowEditDayModal(false)}>
+                  取消
+                </Button>
+                <Button type="submit" variant="primary">
+                  儲存資訊
+                </Button>
+              </div>
+            </form>
+          </Modal>
+        )}
+
+        {showQuickAddBase && (
+          <QuickAddBaseModal
+            isOpen={showQuickAddBase}
+            onClose={() => setShowQuickAddBase(false)}
+            onCreated={(newId) => setEditBaseId(newId)}
           />
         )}
 

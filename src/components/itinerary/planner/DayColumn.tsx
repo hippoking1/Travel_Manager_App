@@ -15,15 +15,16 @@ import { useTripStore } from '../../../stores/tripStore';
 import { useConfig, useBases } from '../../../stores/selectors';
 import { formatDayDate } from '../../../utils/dates';
 import { findConflicts } from '../../../lib/itinerary';
-import { useConfirm } from '../../ui/ConfirmDialog';
 import { Popover } from '../../ui/Popover';
 import { Modal } from '../../ui/Modal';
 import { Input } from '../../ui/Field';
 import { Button } from '../../ui/Button';
+import { toast } from '../../ui/Toast';
 import { ActivityCard } from './ActivityCard';
 import { ActivityEditor } from './ActivityEditor';
 import { DayBacklogTray } from './DayBacklogTray';
 import { QuickAddBaseModal } from '../../shared/QuickAddBaseModal';
+import { DeleteDayModal } from './DeleteDayModal';
 
 export interface DayColumnProps {
   day: DayItinerary;
@@ -39,10 +40,10 @@ export const DayColumn: React.FC<DayColumnProps> = ({
   const config = useConfig();
   const bases = useBases();
   const { updateDay, deleteDay, reflowDay } = useTripStore();
-  const confirm = useConfirm();
 
   const [showAddActivityModal, setShowAddActivityModal] = useState(false);
   const [showEditDayModal, setShowEditDayModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editTitle, setEditTitle] = useState(day.title);
   const [editSubtitle, setEditSubtitle] = useState(day.subtitle);
   const [editBaseId, setEditBaseId] = useState(day.baseId);
@@ -88,15 +89,19 @@ export const DayColumn: React.FC<DayColumnProps> = ({
   const blockIds = day.timeBlocks.map((b) => b.id || 'unknown');
   const conflictIds = findConflicts(day.timeBlocks);
 
-  const handleDeleteDay = async () => {
-    const ok = await confirm({
-      title: `確定要刪除 Day ${day.day} 嗎？`,
-      message: `「${day.title}」及其所有活動將被移除，其後日程將自動遞補重排。`,
-      danger: true,
-      confirmLabel: '刪除整天日程',
-    });
-    if (ok) {
-      deleteDay(containerId);
+  const handleDeleteDay = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDeleteDay = (options: { moveToBacklog: boolean }) => {
+    deleteDay(containerId, options);
+    setShowDeleteModal(false);
+    if (options.moveToBacklog) {
+      toast.success(
+        `已將 Day ${day.day} 的 ${day.timeBlocks.length} 個活動移入景點池，並刪除該日。`
+      );
+    } else {
+      toast.success(`已刪除 Day ${day.day} 及其排程活動。`);
     }
   };
 
@@ -360,6 +365,15 @@ export const DayColumn: React.FC<DayColumnProps> = ({
           isOpen={showQuickAddBase}
           onClose={() => setShowQuickAddBase(false)}
           onCreated={(newId) => setEditBaseId(newId)}
+        />
+      )}
+
+      {showDeleteModal && (
+        <DeleteDayModal
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          day={day}
+          onConfirm={handleConfirmDeleteDay}
         />
       )}
     </>

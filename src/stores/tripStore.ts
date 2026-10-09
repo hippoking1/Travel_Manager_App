@@ -80,9 +80,9 @@ export interface TripStoreState {
   moveBlock: (blockId: string, toContainer: ContainerId, toIndex: number) => void;
   reorderDays: (fromIndex: number, toIndex: number) => void;
   reflowDay: (dayIdOrNumber: string | number, dayStart?: string) => void;
-  addDay: (baseId?: string) => void;
+  addDay: (baseId?: string) => string;
   updateDay: (dayNumberOrId: number | string, updates: Partial<DayItinerary>) => void;
-  deleteDay: (dayNumberOrId: number | string) => void;
+  deleteDay: (dayNumberOrId: number | string, options?: { moveToBacklog?: boolean }) => void;
   addTimeBlock: (dayNumberOrId: number | string, block: Omit<TimeBlock, 'id'> | TimeBlock) => void;
   updateTimeBlock: (dayNumber: number, blockIndex: number, updates: Partial<TimeBlock>) => void;
   deleteTimeBlock: (dayNumber: number, blockIndex: number) => void;
@@ -754,12 +754,14 @@ export const useTripStore = create<TripStoreState>()(
       },
 
       addDay: (baseId) => {
+        let createdDayId = '';
         set((state) =>
           mutateActive(state, (active) => {
             const nextDayNum = active.itinerary.length + 1;
             const chosenBase = baseId || active.config.bases[0]?.id || 'base-main';
+            createdDayId = `day_${nextDayNum}_${Math.random().toString(36).slice(2, 6)}`;
             const newDay: DayItinerary = {
-              id: `day_${nextDayNum}_${Math.random().toString(36).slice(2, 6)}`,
+              id: createdDayId,
               day: nextDayNum,
               baseId: chosenBase,
               title: `第 ${nextDayNum} 天 自訂探索日程`,
@@ -794,6 +796,7 @@ export const useTripStore = create<TripStoreState>()(
             };
           })
         );
+        return createdDayId;
       },
 
       updateDay: (dayNumberOrId, updates) => {
@@ -806,15 +809,41 @@ export const useTripStore = create<TripStoreState>()(
         );
       },
 
-      deleteDay: (dayNumberOrId) => {
+      deleteDay: (dayNumberOrId, options) => {
         set((state) =>
           mutateActive(state, (active) => {
+            if (active.itinerary.length <= 1) {
+              return {};
+            }
+
+            const targetDay = active.itinerary.find(
+              (d) => d.day === dayNumberOrId || d.id === dayNumberOrId
+            );
+
+            let nextBacklog = active.backlog || [];
+
+            if (options?.moveToBacklog && targetDay && targetDay.timeBlocks.length > 0) {
+              const transferred: TimeBlock[] = targetDay.timeBlocks.map((b) => ({
+                ...b,
+                id: b.id?.startsWith('backlog-')
+                  ? b.id
+                  : `backlog-${b.id || Math.random().toString(36).slice(2, 7)}`,
+                baseId: b.baseId || targetDay.baseId,
+                startTime: undefined,
+                endTime: undefined,
+                period: 'morning',
+                periodLabel: undefined,
+              }));
+              nextBacklog = [...nextBacklog, ...transferred];
+            }
+
             const filtered = active.itinerary
               .filter((d) => d.day !== dayNumberOrId && d.id !== dayNumberOrId)
               .map((d, idx) => ({ ...d, day: idx + 1 }));
 
             return {
               itinerary: filtered,
+              backlog: nextBacklog,
               config: {
                 ...active.config,
                 totalDays: filtered.length,

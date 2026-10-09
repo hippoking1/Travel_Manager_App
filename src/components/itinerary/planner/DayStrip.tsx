@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from 'react';
+import { Plus } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import type { DayItinerary } from '../../../types';
 import { useConfig, useBases } from '../../../stores/selectors';
@@ -70,12 +71,14 @@ export interface DayStripProps {
   days: DayItinerary[];
   selectedDayId: string | null;
   onSelectDay: (dayId: string) => void;
+  onAddDay?: () => void;
 }
 
 export const DayStrip: React.FC<DayStripProps> = ({
   days,
   selectedDayId,
   onSelectDay,
+  onAddDay,
 }) => {
   const config = useConfig();
   const bases = useBases();
@@ -118,6 +121,18 @@ export const DayStrip: React.FC<DayStripProps> = ({
           </div>
         );
       })}
+
+      {onAddDay && (
+        <button
+          type="button"
+          onClick={onAddDay}
+          className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-2xl border-2 border-dashed border-stone-300 dark:border-stone-700 hover:border-teal-500 hover:bg-teal-50/60 dark:hover:bg-teal-950/30 text-stone-500 hover:text-teal-700 dark:hover:text-teal-300 text-xs font-bold transition-all cursor-pointer shadow-2xs h-[42px]"
+          title={`新增第 ${days.length + 1} 天行程`}
+        >
+          <Plus className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+          <span>新增天數</span>
+        </button>
+      )}
     </div>
   );
 };

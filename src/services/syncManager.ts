@@ -21,7 +21,9 @@ class SyncManager {
   private itineraryDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    this.lastSyncedAt = localStorage.getItem('travel_last_synced_time');
+    if (typeof localStorage !== 'undefined') {
+      this.lastSyncedAt = localStorage.getItem('travel_last_synced_time');
+    }
     // 監聽瀏覽器網路恢復連線事件
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => {
@@ -35,6 +37,7 @@ class SyncManager {
   /** 取得目前未完成同步佇列 */
   public getQueue(): QueueItem[] {
     try {
+      if (typeof localStorage === 'undefined') return [];
       const raw = localStorage.getItem(STORAGE_KEY);
       return raw ? JSON.parse(raw) : [];
     } catch {
@@ -44,14 +47,18 @@ class SyncManager {
 
   /** 一鍵清空所有待同步排隊佇列 (解決卡在待同步問題) */
   public clearQueue() {
-    localStorage.removeItem(STORAGE_KEY);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY);
+    }
     this.lastError = null;
     this.notify();
   }
 
   /** 儲存佇列到 LocalStorage */
   private saveQueue(queue: QueueItem[]) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+    }
     this.notify();
   }
 

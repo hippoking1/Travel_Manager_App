@@ -91,6 +91,12 @@ export const ItineraryPage: React.FC = () => {
     }
   };
 
+  const handleAddDay = () => {
+    const newDayId = addDay();
+    setSelectedDayId(newDayId);
+    toast.success(`已成功新增第 ${itinerary.length + 1} 天行程！`);
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7">
       {/* 頂部旅行概覽 Banner */}
@@ -156,7 +162,7 @@ export const ItineraryPage: React.FC = () => {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => addDay()}
+              onClick={handleAddDay}
               icon={<Plus className="w-3.5 h-3.5" />}
             >
               新增一天
@@ -214,7 +220,7 @@ export const ItineraryPage: React.FC = () => {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => addDay()}
+          onClick={handleAddDay}
           icon={<Plus className="w-3.5 h-3.5" />}
         >
           新增第 {itinerary.length + 1} 天行程
