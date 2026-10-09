@@ -51,10 +51,20 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose }) =
     onClose();
   };
 
+  const handleSafeClose = () => {
+    if (tripName.trim() || destination.trim()) {
+      if (window.confirm('您有正在建立的旅程資訊尚未儲存，確定要放棄嗎？')) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  };
+
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleSafeClose}
       title={
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-teal-600 dark:bg-teal-500 flex items-center justify-center text-white dark:text-stone-950 shadow-sm">
@@ -181,7 +191,7 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose }) =
 
         {/* 表單按鈕 */}
         <div className="pt-4 border-t border-stone-100 dark:border-stone-800 flex items-center justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>
+          <Button type="button" variant="ghost" onClick={handleSafeClose}>
             取消
           </Button>
           <Button type="submit" variant="primary" icon={<Compass className="w-4 h-4" />}>

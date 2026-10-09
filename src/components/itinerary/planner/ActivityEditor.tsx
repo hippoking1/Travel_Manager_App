@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { TimeBlock, PersonaTag, TransportType, STPCoverage, LocationCategory } from '../../../types';
 import { SCENIC_SUB_TAGS } from '../../../types';
 import { extractCoordsFromUrlOrText } from '../../../lib/geo/inferCoordinates';
@@ -51,60 +51,178 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
   const [transportType, setTransportType] = useState<TransportType>('train');
   const [stpCoverage, setStpCoverage] = useState<STPCoverage>('free');
 
-  useEffect(() => {
-    if (initialBlock) {
-      setTitle(initialBlock.title || '');
-      setDescription(initialBlock.description || '');
-      // 優先取用 initialBlock.baseId，若無則備援取所屬日程天數的 baseId
-      const targetDay = dayIdOrNumber !== undefined
-        ? itinerary.find((d) => (d.id || String(d.day)) === String(dayIdOrNumber) || d.day === dayIdOrNumber)
-        : undefined;
-      const initialBaseVal = initialBlock.baseId || targetDay?.baseId || '';
-      const matched = bases.find((b) => b.id === initialBaseVal || b.nameZh === initialBaseVal || b.name === initialBaseVal);
-      setBaseId(matched ? matched.id : initialBaseVal);
-      setStartTime(initialBlock.startTime || '09:00');
-      setEndTime(initialBlock.endTime || '11:30');
-      setLocationName(initialBlock.locationName || '');
-      setGoogleMapsUrl(initialBlock.googleMapsUrl || '');
-      setAltitude(initialBlock.altitude ? String(initialBlock.altitude) : '');
-      setTags(initialBlock.tags || ['senior-friendly']);
-      setSubCategories(
-        initialBlock.subCategories ||
-        (initialBlock.category ? [initialBlock.category] : [])
-      );
+  const isInitializedRef = useRef(false);
+  const prevBlockIdRef = useRef<string | undefined>(undefined);
+  const draftKey = `travel_draft_act_${isBacklog ? 'backlog' : dayIdOrNumber ?? 'new'}`;
 
-      if (initialBlock.transport) {
-        setTransportFrom(initialBlock.transport.from || '');
-        setTransportTo(initialBlock.transport.to || '');
-        setTransportType(initialBlock.transport.type || 'train');
-        setStpCoverage(initialBlock.transport.stpCoverage || 'free');
+  // 僅在 Modal 剛打開或切換編輯對象時初始化表單，背景資料同步絕不重置使用者輸入
+  useEffect(() => {
+    if (!isOpen) {
+      isInitializedRef.current = false;
+      return;
+    }
+
+    const currentBlockId = initialBlock?.id;
+    const isNewBlock = currentBlockId !== prevBlockIdRef.current;
+
+    if (!isInitializedRef.current || isNewBlock) {
+      isInitializedRef.current = true;
+      prevBlockIdRef.current = currentBlockId;
+
+      if (initialBlock) {
+        setTitle(initialBlock.title || '');
+        setDescription(initialBlock.description || '');
+        // 優先取用 initialBlock.baseId，若無則備援取所屬日程天數的 baseId
+        const targetDay = dayIdOrNumber !== undefined
+          ? itinerary.find((d) => (d.id || String(d.day)) === String(dayIdOrNumber) || d.day === dayIdOrNumber)
+          : undefined;
+        const initialBaseVal = initialBlock.baseId || targetDay?.baseId || '';
+        const matched = bases.find((b) => b.id === initialBaseVal || b.nameZh === initialBaseVal || b.name === initialBaseVal);
+        setBaseId(matched ? matched.id : initialBaseVal);
+        setStartTime(initialBlock.startTime || '09:00');
+        setEndTime(initialBlock.endTime || '11:30');
+        setLocationName(initialBlock.locationName || '');
+        setGoogleMapsUrl(initialBlock.googleMapsUrl || '');
+        setAltitude(initialBlock.altitude ? String(initialBlock.altitude) : '');
+        setTags(initialBlock.tags || ['senior-friendly']);
+        setSubCategories(
+          initialBlock.subCategories ||
+          (initialBlock.category ? [initialBlock.category] : [])
+        );
+
+        if (initialBlock.transport) {
+          setTransportFrom(initialBlock.transport.from || '');
+          setTransportTo(initialBlock.transport.to || '');
+          setTransportType(initialBlock.transport.type || 'train');
+          setStpCoverage(initialBlock.transport.stpCoverage || 'free');
+        } else {
+          setTransportFrom('');
+          setTransportTo('');
+          setTransportType('train');
+          setStpCoverage('free');
+        }
       } else {
-        setTransportFrom('');
-        setTransportTo('');
-        setTransportType('train');
-        setStpCoverage('free');
+        // 新增模式：若先前有未完成的輸入草稿，自動復原
+        let restored = false;
+        try {
+          const rawDraft = sessionStorage.getItem(draftKey);
+          if (rawDraft) {
+            const draft = JSON.parse(rawDraft);
+            if (draft.title || draft.description || draft.googleMapsUrl || draft.locationName) {
+              setTitle(draft.title || '');
+              setDescription(draft.description || '');
+              setBaseId(draft.baseId || '');
+              setStartTime(draft.startTime || '09:00');
+              setEndTime(draft.endTime || '11:30');
+              setLocationName(draft.locationName || '');
+              setGoogleMapsUrl(draft.googleMapsUrl || '');
+              setAltitude(draft.altitude || '');
+              setTags(draft.tags || ['senior-friendly']);
+              setSubCategories(draft.subCategories || []);
+              setTransportFrom(draft.transportFrom || '');
+              setTransportTo(draft.transportTo || '');
+              setTransportType(draft.transportType || 'train');
+              setStpCoverage(draft.stpCoverage || 'free');
+              restored = true;
+            }
+          }
+        } catch {
+          // ignore draft parsing errors
+        }
+
+        if (!restored) {
+          setTitle('');
+          setDescription('');
+          // 若是針對特定天數新增，自動以該天的 baseId 為預設景點區域
+          const targetDay = dayIdOrNumber !== undefined
+            ? itinerary.find((d) => (d.id || String(d.day)) === String(dayIdOrNumber) || d.day === dayIdOrNumber)
+            : undefined;
+          setBaseId(targetDay?.baseId || '');
+          setStartTime('09:00');
+          setEndTime('11:30');
+          setLocationName('');
+          setGoogleMapsUrl('');
+          setAltitude('');
+          setTags(['senior-friendly']);
+          setSubCategories([]);
+          setTransportFrom('');
+          setTransportTo('');
+          setTransportType('train');
+          setStpCoverage('free');
+        }
+      }
+    }
+  }, [initialBlock, isOpen, dayIdOrNumber]);
+
+  // 新增模式下自動暫存正在輸入的草稿
+  useEffect(() => {
+    if (!isOpen || initialBlock) return;
+    if (title || description || locationName || googleMapsUrl) {
+      sessionStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          title,
+          description,
+          baseId,
+          startTime,
+          endTime,
+          locationName,
+          googleMapsUrl,
+          altitude,
+          tags,
+          subCategories,
+          transportFrom,
+          transportTo,
+          transportType,
+          stpCoverage,
+        })
+      );
+    }
+  }, [
+    isOpen,
+    initialBlock,
+    draftKey,
+    title,
+    description,
+    baseId,
+    startTime,
+    endTime,
+    locationName,
+    googleMapsUrl,
+    altitude,
+    tags,
+    subCategories,
+    transportFrom,
+    transportTo,
+    transportType,
+    stpCoverage,
+  ]);
+
+  // 關閉前的防呆確認
+  const handleSafeClose = () => {
+    const hasUnsavedContent = initialBlock
+      ? title !== (initialBlock.title || '') ||
+        description !== (initialBlock.description || '') ||
+        googleMapsUrl !== (initialBlock.googleMapsUrl || '') ||
+        locationName !== (initialBlock.locationName || '') ||
+        baseId !== (initialBlock.baseId || '')
+      : Boolean(
+          title.trim() ||
+          description.trim() ||
+          locationName.trim() ||
+          googleMapsUrl.trim()
+        );
+
+    if (hasUnsavedContent) {
+      if (window.confirm('您有正在填寫的內容尚未儲存，確定要放棄填寫嗎？')) {
+        sessionStorage.removeItem(draftKey);
+        onClose();
       }
     } else {
-      setTitle('');
-      setDescription('');
-      // 若是針對特定天數新增，自動以該天的 baseId 為預設景點區域
-      const targetDay = dayIdOrNumber !== undefined
-        ? itinerary.find((d) => (d.id || String(d.day)) === String(dayIdOrNumber) || d.day === dayIdOrNumber)
-        : undefined;
-      setBaseId(targetDay?.baseId || '');
-      setStartTime('09:00');
-      setEndTime('11:30');
-      setLocationName('');
-      setGoogleMapsUrl('');
-      setAltitude('');
-      setTags(['senior-friendly']);
-      setSubCategories([]);
-      setTransportFrom('');
-      setTransportTo('');
-      setTransportType('train');
-      setStpCoverage('free');
+      sessionStorage.removeItem(draftKey);
+      onClose();
     }
-  }, [initialBlock, isOpen, dayIdOrNumber, itinerary]);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,6 +273,8 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
       addTimeBlock(dayIdOrNumber, blockData);
     }
 
+    // 成功提交後清理草稿
+    sessionStorage.removeItem(draftKey);
     onClose();
   };
 
@@ -169,7 +289,8 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
     <>
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleSafeClose}
+      closeOnBackdropClick={false}
       title={
         initialBlock
           ? '編輯活動景點'
@@ -404,7 +525,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
 
         {/* 按鈕列 */}
         <div className="pt-3 border-t border-stone-100 dark:border-stone-800 flex items-center justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>
+          <Button type="button" variant="ghost" onClick={handleSafeClose}>
             取消
           </Button>
           <Button type="submit" variant="primary">

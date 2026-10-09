@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 
 export interface ModalProps {
@@ -9,6 +9,7 @@ export interface ModalProps {
   children: React.ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
   showCloseButton?: boolean;
+  closeOnBackdropClick?: boolean;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -19,8 +20,10 @@ export const Modal: React.FC<ModalProps> = ({
   children,
   maxWidth = 'md',
   showCloseButton = true,
+  closeOnBackdropClick = false,
 }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [isShaking, setIsShaking] = useState(false);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -43,22 +46,41 @@ export const Modal: React.FC<ModalProps> = ({
     };
   }, [isOpen]);
 
+  const triggerShakeFeedback = () => {
+    setIsShaking(true);
+    setTimeout(() => setIsShaking(false), 320);
+  };
+
   const handleCancel = (e: React.SyntheticEvent) => {
     e.preventDefault();
-    onClose();
+    if (closeOnBackdropClick) {
+      onClose();
+    } else {
+      triggerShakeFeedback();
+    }
   };
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDialogElement>) => {
     const dialog = dialogRef.current;
     if (!dialog) return;
+
+    // 點擊事件必須發生在 dialog 元素本身 (::backdrop 區域)
+    if (e.target !== dialog) return;
+
     const rect = dialog.getBoundingClientRect();
     const isInDialog =
       rect.top <= e.clientY &&
       e.clientY <= rect.top + rect.height &&
       rect.left <= e.clientX &&
       e.clientX <= rect.left + rect.width;
+
     if (!isInDialog) {
-      onClose();
+      if (closeOnBackdropClick) {
+        onClose();
+      } else {
+        // 點擊卡片外部區域時不關閉，並觸發輕微抖動視覺反饋，避免未儲存的輸入遺失
+        triggerShakeFeedback();
+      }
     }
   };
 
@@ -78,7 +100,11 @@ export const Modal: React.FC<ModalProps> = ({
       onClick={handleBackdropClick}
       className={`fixed inset-0 m-auto p-0 bg-transparent backdrop:bg-stone-950/60 backdrop:backdrop-blur-xs w-[calc(100%-2rem)] ${maxWidthClasses[maxWidth]} rounded-3xl outline-none shadow-2xl transition-all open:animate-in open:fade-in-0 open:zoom-in-95 z-50`}
     >
-      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl overflow-hidden flex flex-col max-h-[88vh]">
+      <div
+        className={`bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl overflow-hidden flex flex-col max-h-[88vh] transition-all duration-150 ${
+          isShaking ? 'animate-modal-shake ring-2 ring-teal-500/60 shadow-2xl' : ''
+        }`}
+      >
         {(title || showCloseButton) && (
           <div className="flex items-start justify-between px-6 pt-5 pb-3 border-b border-stone-100 dark:border-stone-800/80 shrink-0">
             <div>

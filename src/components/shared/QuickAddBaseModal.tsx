@@ -65,10 +65,20 @@ export const QuickAddBaseModal: React.FC<QuickAddBaseModalProps> = ({
     setNotes('');
   };
 
+  const handleSafeClose = () => {
+    if (nameZh.trim() || hotelName.trim()) {
+      if (window.confirm('您有正在填寫的景點區域尚未儲存，確定要放棄填寫嗎？')) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  };
+
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleSafeClose}
       title="新增景點區域"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -156,7 +166,7 @@ export const QuickAddBaseModal: React.FC<QuickAddBaseModalProps> = ({
         />
 
         <div className="flex justify-end gap-2 pt-2 border-t border-stone-200 dark:border-stone-800">
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={handleSafeClose}>
             取消
           </Button>
           <Button type="submit" variant="primary">

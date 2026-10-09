@@ -25,8 +25,15 @@ export const App: React.FC = () => {
   useEffect(() => {
     let lastPullTime = Date.now();
     const handleActive = () => {
-      // 至少間隔 10 秒以上才重新觸發拉取，防止頻繁聚焦洗頻
-      if (Date.now() - lastPullTime > 10000 && document.visibilityState === 'visible') {
+      // 若目前有彈出視窗正在編輯中，或使用者正在輸入欄位內輸入文字，暫緩自動拉取，避免中斷填寫
+      const hasOpenDialog = Boolean(document.querySelector('dialog[open]'));
+      const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '');
+      if (hasOpenDialog || isTyping) {
+        return;
+      }
+
+      // 至少間隔 15 秒以上才重新觸發拉取，防止頻繁聚焦洗頻
+      if (Date.now() - lastPullTime > 15000 && document.visibilityState === 'visible') {
         lastPullTime = Date.now();
         fetchLatestFromSheets();
       }

@@ -249,6 +249,26 @@ export const BookingsPage: React.FC = () => {
     setShowAccModal(false);
   };
 
+  const handleCloseAcc = () => {
+    if (accHotelName.trim() || accAddress.trim() || accCode.trim()) {
+      if (window.confirm('您有正在填寫的住宿資訊尚未儲存，確定要放棄嗎？')) {
+        setShowAccModal(false);
+      }
+    } else {
+      setShowAccModal(false);
+    }
+  };
+
+  const handleCloseTrans = () => {
+    if (transTitle.trim() || transFrom.trim() || transTo.trim() || transRef.trim()) {
+      if (window.confirm('您有正在填寫的交通資訊尚未儲存，確定要放棄嗎？')) {
+        setShowTransModal(false);
+      }
+    } else {
+      setShowTransModal(false);
+    }
+  };
+
   const handleDeleteAcc = async (id: string, name: string) => {
     const ok = await confirm({
       title: `確定要刪除「${name}」的住宿預訂紀錄嗎？`,
@@ -703,7 +723,7 @@ export const BookingsPage: React.FC = () => {
       {showAccModal && (
         <Modal
           isOpen={showAccModal}
-          onClose={() => setShowAccModal(false)}
+          onClose={handleCloseAcc}
           title={editingAcc ? '編輯住宿預訂' : '新增住宿預訂'}
           maxWidth="xl"
         >
@@ -919,7 +939,7 @@ export const BookingsPage: React.FC = () => {
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-stone-100 dark:border-stone-800">
-              <Button type="button" variant="ghost" onClick={() => setShowAccModal(false)}>
+              <Button type="button" variant="ghost" onClick={handleCloseAcc}>
                 取消
               </Button>
               <Button type="submit" variant="primary">
@@ -934,7 +954,7 @@ export const BookingsPage: React.FC = () => {
       {showTransModal && (
         <Modal
           isOpen={showTransModal}
-          onClose={() => setShowTransModal(false)}
+          onClose={handleCloseTrans}
           title={editingTrans ? '編輯交通訂單' : '新增交通訂單'}
           maxWidth="xl"
         >
@@ -1066,7 +1086,7 @@ export const BookingsPage: React.FC = () => {
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-stone-100 dark:border-stone-800">
-              <Button type="button" variant="ghost" onClick={() => setShowTransModal(false)}>
+              <Button type="button" variant="ghost" onClick={handleCloseTrans}>
                 取消
               </Button>
               <Button type="submit" variant="primary">
