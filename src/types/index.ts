@@ -203,6 +203,7 @@ export interface AccommodationBooking {
   paymentStatusLabel: string;
   address: string;
   googleMapsUrl?: string;
+  coordinates?: [number, number]; // [lat, lng] 精準坐標
   contactPhone?: string;
   contactEmail?: string;
   // 重要入住與須知細節

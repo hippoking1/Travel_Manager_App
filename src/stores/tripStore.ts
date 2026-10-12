@@ -1549,6 +1549,11 @@ export const useTripStore = create<TripStoreState>()(
                   address: String(acc.address || ''),
                   contactPhone: acc.contactPhone ? String(acc.contactPhone) : undefined,
                   googleMapsUrl: acc.googleMapsUrl ? String(acc.googleMapsUrl) : undefined,
+                  coordinates: Array.isArray(acc.coordinates) && acc.coordinates.length === 2
+                    ? [Number(acc.coordinates[0]), Number(acc.coordinates[1])]
+                    : (acc.lat !== undefined && acc.lng !== undefined && !isNaN(Number(acc.lat)) && !isNaN(Number(acc.lng)))
+                    ? [Number(acc.lat), Number(acc.lng)]
+                    : undefined,
                   checkInTimeNotice: String(acc.checkInTimeNotice || ''),
                   keyPickupNotice: String(acc.keyPickupNotice || ''),
                   garbageRulesNotice: String(acc.garbageRulesNotice || ''),

@@ -276,4 +276,126 @@ describe('geo - extractAllTripLocations', () => {
     // 應保留 googleMapsUrl 以便地圖導航
     expect(spot.googleMapsUrl).toContain('Matterhorn+Glacier+Paradise');
   });
+
+  it('correctly maps Hyatt Place Zurich and ALL IN ONE St. Moritz to distinct regional coordinates without collapsing to Grindelwald', () => {
+    const multiRegionTrip: TripPlan = {
+      id: 'trip_multi_region',
+      name: '瑞士 15 天深度鐵道健行之旅',
+      destination: '瑞士 (盧塞恩・格林德瓦・策馬特)',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+      config: {
+        tripName: '瑞士 15 天深度鐵道健行之旅',
+        subtitle: '',
+        startDate: '2027-06-01',
+        totalDays: 15,
+        travelers: [],
+        bases: [
+          {
+            id: 'base_zurich',
+            name: 'Zurich',
+            nameZh: '蘇黎世',
+            days: [1, 2],
+            color: '#8B5CF6',
+            hotelName: '蘇黎世飯店',
+            coordinates: [47.3769, 8.5417],
+          },
+          {
+            id: 'base_st_moritz',
+            name: 'St. Moritz',
+            nameZh: '聖莫里茨',
+            days: [3, 4],
+            color: '#F59E0B',
+            hotelName: '聖莫里茨飯店',
+            coordinates: [46.4908, 9.8355],
+          },
+          {
+            id: 'base_grindelwald',
+            name: 'Grindelwald',
+            nameZh: '格林德瓦',
+            days: [5, 6, 7],
+            color: '#10B981',
+            hotelName: '格林德瓦木屋',
+            coordinates: [46.6244, 8.0414],
+          },
+        ],
+        currencies: DEFAULT_CURRENCY_CONFIG,
+      },
+      itinerary: [],
+      backlog: [],
+      modules: ['swiss'],
+      locations: [],
+      expenses: [],
+      checklist: [],
+      accommodations: [
+        {
+          id: 'acc_zurich',
+          baseId: 'base_zurich',
+          baseNameZh: '蘇黎世',
+          hotelName: 'Hyatt Place Zurich Airport The Circle',
+          roomType: '3人房/4人房',
+          checkInDate: '2027-06-01',
+          checkOutDate: '2027-06-03',
+          nights: 2,
+          bookingPlatform: 'Booking.com',
+          confirmationCode: '',
+          totalPrice: 600,
+          currency: 'CHF',
+          paymentStatus: 'paid',
+          paymentStatusLabel: '已付款',
+          address: 'The Circle 1, 8058 Zurich-Flughafen',
+          checkInTimeNotice: '',
+          keyPickupNotice: '',
+          garbageRulesNotice: '',
+          kitchenRulesNotice: '',
+        },
+        {
+          id: 'acc_st_moritz',
+          baseId: 'base_st_moritz',
+          baseNameZh: '聖莫里茨',
+          hotelName: 'ALL IN ONE HOTEL INN LODGE / SWISS LODGE',
+          roomType: 'Studio M+',
+          checkInDate: '2027-06-03',
+          checkOutDate: '2027-06-05',
+          nights: 2,
+          bookingPlatform: 'Booking.com',
+          confirmationCode: '',
+          totalPrice: 500,
+          currency: 'CHF',
+          paymentStatus: 'paid',
+          paymentStatusLabel: '已付款',
+          address: 'Via Nouva 13, 7505 Celerina',
+          checkInTimeNotice: '',
+          keyPickupNotice: '',
+          garbageRulesNotice: '',
+          kitchenRulesNotice: '',
+        },
+      ],
+      transports: [],
+      bookmarks: [],
+    };
+
+    const extracted = extractAllTripLocations(multiRegionTrip);
+    const zurichLoc = extracted.find((l) => l.name.includes('Hyatt Place Zurich'));
+    const stMoritzLoc = extracted.find((l) => l.name.includes('ALL IN ONE HOTEL'));
+
+    expect(zurichLoc).toBeDefined();
+    expect(stMoritzLoc).toBeDefined();
+
+    // 絕不重複落在格林德瓦 (lat 46.6244)
+    expect(zurichLoc!.coordinates[0]).not.toBeCloseTo(46.6244, 2);
+    expect(stMoritzLoc!.coordinates[0]).not.toBeCloseTo(46.6244, 2);
+
+    // 兩者絕不重疊在同一點
+    expect(zurichLoc!.coordinates[0]).not.toBeCloseTo(stMoritzLoc!.coordinates[0], 2);
+    expect(zurichLoc!.coordinates[1]).not.toBeCloseTo(stMoritzLoc!.coordinates[1], 2);
+
+    // 蘇黎世飯店應落在蘇黎世/機場經緯度 (~47.45 或 ~47.37, 經度 ~8.55)
+    expect(zurichLoc!.coordinates[0]).toBeGreaterThan(47.3);
+    expect(zurichLoc!.coordinates[1]).toBeCloseTo(8.55, 1);
+
+    // 聖莫里茨飯店應落在聖莫里茨/Celerina經緯度 (~46.49 或 ~46.51, 經度 ~9.84 或 ~9.86)
+    expect(stMoritzLoc!.coordinates[0]).toBeCloseTo(46.5, 1);
+    expect(stMoritzLoc!.coordinates[1]).toBeCloseTo(9.85, 1);
+  });
 });

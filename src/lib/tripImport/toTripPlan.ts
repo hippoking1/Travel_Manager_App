@@ -56,7 +56,7 @@ function deriveBases(
         color: b.color || BASE_COLORS[idx % BASE_COLORS.length],
         hotelName: b.hotelName || `${name} 推薦住宿`,
         hotelAddress: b.hotelAddress,
-        coordinates: b.coordinates || inferCoordinates(name, b.hotelName, destination),
+        coordinates: b.coordinates || inferCoordinates(name, b.hotelName) || inferCoordinates(destination),
         notes: b.notes,
       });
     });
@@ -80,7 +80,7 @@ function deriveBases(
 
       if (area && !seenNames.has(normArea)) {
         seenNames.add(normArea);
-        const coords = inferCoordinates(acc.hotelName, acc.address, `${area} ${destination}`);
+        const coords = inferCoordinates(acc.hotelName, acc.address) || inferCoordinates(area) || inferCoordinates(destination);
         bases.push({
           id: acc.baseId || `base_acc_${idx + 1}`,
           name: area,

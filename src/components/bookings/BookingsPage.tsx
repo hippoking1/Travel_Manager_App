@@ -20,6 +20,7 @@ import {
 import { parseISO, differenceInDays } from 'date-fns';
 import { normalizeDateString } from '../../utils/dates';
 import type { AccommodationBooking, TransportBooking } from '../../types';
+import { inferCoordinates, extractCoordsFromUrlOrText } from '../../lib/geo';
 import { useTripStore } from '../../stores/tripStore';
 import { useActiveTrip, useBases, useConfig } from '../../stores/selectors';
 import { formatMoney } from '../../utils/currency';
@@ -217,6 +218,13 @@ export const BookingsPage: React.FC = () => {
         ? '抵達入住現場支付'
         : '已付部分訂金';
 
+    const parsedCoords = (accMapsUrl ? extractCoordsFromUrlOrText(accMapsUrl) : undefined)
+      || (accAddress ? extractCoordsFromUrlOrText(accAddress) : undefined)
+      || (accMapsUrl ? inferCoordinates(accMapsUrl) : undefined)
+      || (accAddress ? inferCoordinates(accAddress) : undefined)
+      || inferCoordinates(accHotelName.trim())
+      || baseObj?.coordinates;
+
     const accData: Omit<AccommodationBooking, 'id'> = {
       baseId: accBaseId,
       baseNameZh,
@@ -234,6 +242,7 @@ export const BookingsPage: React.FC = () => {
       address: accAddress.trim(),
       contactPhone: accPhone.trim() || undefined,
       googleMapsUrl: accMapsUrl.trim() || undefined,
+      coordinates: parsedCoords || editingAcc?.coordinates || baseObj?.coordinates,
       checkInTimeNotice: accCheckInNotice.trim(),
       keyPickupNotice: accKeyNotice.trim(),
       garbageRulesNotice: accGarbageNotice.trim(),

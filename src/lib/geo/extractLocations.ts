@@ -4,7 +4,7 @@ import type {
   LocationCategory, 
   TimeBlock 
 } from '../../types';
-import { inferCoordinates } from './inferCoordinates';
+import { inferCoordinates, extractCoordsFromUrlOrText } from './inferCoordinates';
 
 /**
  * 依活動標籤與標題關鍵字，智慧推斷地點分類
@@ -56,18 +56,28 @@ export function extractAllTripLocations(plan: TripPlan): MapLocation[] {
   // 1. 提取真實住宿 Accommodations (若有，則為住宿基地的唯一絕對來源)
   if (hasAccommodations) {
     plan.accommodations.forEach((acc, idx) => {
-      // 優先從 googleMapsUrl 或 address 解析精確座標，否則退回飯店名與地區名推斷
-      const coords = inferCoordinates(acc.googleMapsUrl, acc.address, `${acc.hotelName} ${acc.baseNameZh || ''} ${destination}`);
+      const baseArea = acc.baseNameZh?.trim() || '';
+      // 找出此住宿對應的基地
+      const matchingBase = plan.config?.bases?.find(
+        (b) => b.id === acc.baseId || (baseArea && (b.nameZh?.includes(baseArea) || b.name?.toLowerCase().includes(baseArea.toLowerCase())))
+      );
+      const days = (matchingBase?.days && matchingBase.days.length > 0) ? matchingBase.days : [idx + 1];
+
+      // 嚴格階層式解析座標，絕不將 destination 混入搜尋字串造成跨區誤判
+      const coords = acc.coordinates
+        || (acc.googleMapsUrl ? extractCoordsFromUrlOrText(acc.googleMapsUrl) : undefined)
+        || (acc.address ? extractCoordsFromUrlOrText(acc.address) : undefined)
+        || (acc.googleMapsUrl ? inferCoordinates(acc.googleMapsUrl) : undefined)
+        || (acc.address ? inferCoordinates(acc.address) : undefined)
+        || inferCoordinates(acc.hotelName)
+        || matchingBase?.coordinates
+        || inferCoordinates(matchingBase?.nameZh, matchingBase?.name)
+        || (baseArea ? inferCoordinates(baseArea) : undefined)
+        || inferCoordinates(destination)
+        || [47.0502, 8.3093];
+
       if (coords) {
         const name = acc.hotelName.trim();
-        const baseArea = acc.baseNameZh?.trim() || '';
-
-        // 找出此住宿對應的基地天數
-        const matchingBase = plan.config?.bases?.find(
-          (b) => b.id === acc.baseId || (baseArea && b.nameZh?.includes(baseArea))
-        );
-        const days = (matchingBase?.days && matchingBase.days.length > 0) ? matchingBase.days : [idx + 1];
-
         const key = `hotel_${name.toLowerCase()}`;
         visitedNames.set(key, {
           id: `loc_acc_${acc.id}`,
@@ -88,7 +98,12 @@ export function extractAllTripLocations(plan: TripPlan): MapLocation[] {
       const bName = (b.nameZh || b.name || '').trim();
       if (!bName) return;
 
-      const coords = b.coordinates || inferCoordinates(b.nameZh, b.name, `${b.hotelName || ''} ${destination}`);
+      const coords = b.coordinates 
+        || inferCoordinates(b.nameZh, b.name) 
+        || inferCoordinates(b.hotelName) 
+        || inferCoordinates(destination)
+        || [47.0502, 8.3093];
+
       if (coords) {
         const key = `base_${bName.toLowerCase()}`;
         visitedNames.set(key, {
@@ -119,13 +134,14 @@ export function extractAllTripLocations(plan: TripPlan): MapLocation[] {
       const blockBase = (plan.config?.bases || []).find((b) => b.id === block.baseId);
 
       // 推斷坐標時優先自 googleMapsUrl 提取，其次為既有 coordinates，再退回名稱推斷或基地坐標
-      const coords = (block.googleMapsUrl ? inferCoordinates(block.googleMapsUrl) : undefined)
+      const coords = (block.googleMapsUrl ? extractCoordsFromUrlOrText(block.googleMapsUrl) : undefined)
         || block.coordinates 
-        || inferCoordinates(placeName, block.title, destination, false)
+        || (block.googleMapsUrl ? inferCoordinates(block.googleMapsUrl) : undefined)
+        || inferCoordinates(placeName, block.title, undefined, false)
         || blockBase?.coordinates
-        || inferCoordinates(blockBase?.nameZh, blockBase?.name, destination, false)
+        || inferCoordinates(blockBase?.nameZh, blockBase?.name, undefined, false)
         || dayBase?.coordinates
-        || inferCoordinates(dayBase?.nameZh, dayBase?.name, destination, false)
+        || inferCoordinates(dayBase?.nameZh, dayBase?.name, undefined, false)
         || inferCoordinates(destination, undefined, undefined, false)
         || [47.0502, 8.3093];
 
@@ -170,11 +186,12 @@ export function extractAllTripLocations(plan: TripPlan): MapLocation[] {
 
     const blockBase = (plan.config?.bases || []).find((b) => b.id === block.baseId);
 
-    const coords = (block.googleMapsUrl ? inferCoordinates(block.googleMapsUrl) : undefined)
+    const coords = (block.googleMapsUrl ? extractCoordsFromUrlOrText(block.googleMapsUrl) : undefined)
       || block.coordinates 
-      || inferCoordinates(placeName, block.title, destination, false)
+      || (block.googleMapsUrl ? inferCoordinates(block.googleMapsUrl) : undefined)
+      || inferCoordinates(placeName, block.title, undefined, false)
       || blockBase?.coordinates
-      || inferCoordinates(blockBase?.nameZh, blockBase?.name, destination, false)
+      || inferCoordinates(blockBase?.nameZh, blockBase?.name, undefined, false)
       || inferCoordinates(destination, undefined, undefined, false)
       || [47.0502, 8.3093];
 

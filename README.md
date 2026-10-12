@@ -45,13 +45,17 @@
 - **Google Maps URL 智慧解析**：支援在新增/編輯活動時填入 Google Maps 連結，系統自動解析 `!3d{lat}!4d{lng}` data 參數、`destination=` 與 `@lat,lng` 座標，確保地圖 100% 精確定位與導航。
 - **景觀交通次標籤**：在「景觀交通」主標籤下提供高山名峰、歷史文化、超市購物、親子風景次標籤，讓地理地圖點位分類完全準確，避免誤判為單純交通站點。
 
-### 4. 互動式地理探索地圖 (Interactive Geographic Map View)
+### 4. 互動式地理探索地圖 (Interactive Geographic Map View) ⭐ *Updated*
 - 採用 **Leaflet / React-Leaflet**，免 API Key 自由切換「標準地圖」、「地形等高線」與「衛星影像」三大圖磚圖層。
+- **階層式精準座標解析架構**：
+  - 徹底解決不同地址與不同地區住宿/景點被錯誤歸併在同一預設點位（如格林德瓦）的問題。
+  - 嚴格依序解析：自填 Google Maps URL 經緯度 ➔ 地址純座標 ➔ 飯店/景點名稱離線字典匹配 ➔ **所屬住宿基地/景點區域精確座標綁定** ➔ 區域名稱匹配。
+  - 擴充瑞士常用地名與交通樞紐字典（涵蓋 Zurich / The Circle 蘇黎世機場建築群、St. Moritz / Celerina 聖莫里茨、Lucerne、Zermatt 等英德文地名與縮寫）。
 - 標記全行程真實住宿基地、景點群、高山觀景台與超市站點。
 - 支援「路線天數軌跡 (Polyline)」與「分類圖釘 (Category Pins)」，點擊跳出彈窗卡片並提供外部 WebCam 與 Google 地圖導航。
 
-### 5. 住宿與車票須知管理 (Bookings & Transports Hub)
-- **住宿預訂管理**：記錄各大飯店、公寓門鎖密碼盒 (Keybox)、垃圾專用袋分類與廚房復原須知。
+### 5. 住宿與車票須知管理 (Bookings & Transports Hub) ⭐ *Updated*
+- **住宿預訂管理**：記錄各大飯店、公寓門鎖密碼盒 (Keybox)、垃圾專用袋分類與廚房復原須知；儲存時即時智慧提取 Google Maps 網址與基地坐標，確保地圖點位 100% 正確連動。
 - **交通車票管理**：匯整跨國航班、全景景觀列車劃位 (Seats)、登車月台與大件行李放置規定。
 
 ### 6. 智能 Swiss Travel Pass (STP) & 預算記帳中心

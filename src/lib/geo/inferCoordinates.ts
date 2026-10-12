@@ -20,8 +20,8 @@ export function extractCoordsFromUrlOrText(text?: string): [number, number] | un
     if (!isNaN(lat) && !isNaN(lng)) return [lat, lng];
   }
 
-  // 2. 匹配 q=lat,lng 或 ll=lat,lng 或 query=lat,lng 或 destination=lat,lng
-  const qMatch = str.match(/[?&](?:q|ll|query|destination)=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  // 2. 匹配 q=lat,lng 或 ll=lat,lng 或 query=lat,lng 或 destination=lat,lng 或 center=lat,lng 或 loc:lat,lng
+  const qMatch = str.match(/[?&](?:q|ll|query|destination|center|loc|saddr|daddr|point)=(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (qMatch) {
     const lat = parseFloat(qMatch[1]);
     const lng = parseFloat(qMatch[2]);
@@ -36,20 +36,34 @@ export function extractCoordsFromUrlOrText(text?: string): [number, number] | un
     if (!isNaN(lat) && !isNaN(lng)) return [lat, lng];
   }
 
-  // 4. 匹配純經緯度格式 "46.0207, 7.7491"
-  const rawMatch = str.match(/^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/);
+  // 4. 匹配 lat=...&lng=... 或 lat=...&lon=...
+  const latLngParamMatch = str.match(/[?&]lat=(-?\d+\.\d+)&(?:lng|lon)=(-?\d+\.\d+)/);
+  if (latLngParamMatch) {
+    const lat = parseFloat(latLngParamMatch[1]);
+    const lng = parseFloat(latLngParamMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng)) return [lat, lng];
+  }
+
+  // 5. 匹配純經緯度格式 "46.0207, 7.7491" 或包含於括號中 "(46.0207, 7.7491)"
+  const rawMatch = str.match(/(?:^|[(\[\s])(-?\d{1,3}\.\d{3,8})\s*,\s*(-?\d{1,3}\.\d{3,8})(?:[)\]\s]|$)/);
   if (rawMatch) {
     const lat = parseFloat(rawMatch[1]);
     const lng = parseFloat(rawMatch[2]);
-    if (!isNaN(lat) && !isNaN(lng)) return [lat, lng];
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return [lat, lng];
+    }
   }
 
   return undefined;
 }
 
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * 依據文本（景點名、標題、地址、城市、Google Maps 連結）智慧推斷經緯度座標 [lat, lng]
- * 支援完全匹配、長度優先模糊子字串包含匹配與微偏移
+ * 支援嚴格優先級、長度優先模糊子字串包含匹配、大小寫容錯與微偏移
  */
 export function inferCoordinates(
   primaryText?: string,
@@ -63,27 +77,44 @@ export function inferCoordinates(
 
   if (candidates.length === 0) return undefined;
 
-  // 0. 若任一文字中含有精準經緯度或 Google Maps 座標連結，最高優先返回精確座標！
+  // 0. 最高優先級：若任一文字中含有精準經緯度或 Google Maps 座標連結，立即返回精確座標！
   for (const text of candidates) {
     const parsed = extractCoordsFromUrlOrText(text);
     if (parsed) return parsed;
   }
 
-  // 1. 完全匹配優先
+  const sortedKeys = Object.keys(KNOWN_COORDINATES).sort((a, b) => b.length - a.length);
+
+  // 依候選文字優先級順序 (primaryText -> secondaryText -> fallbackDestination) 逐一匹配
   for (const text of candidates) {
     const trimmed = text.trim();
+
+    // 1. 完全精確匹配優先
     if (KNOWN_COORDINATES[trimmed]) {
       return applyJitterCoords(KNOWN_COORDINATES[trimmed], applyJitter);
     }
-  }
 
-  // 2. 子字串包含比對：將字典鍵依長度由大到小排序，避免短詞搶先誤判
-  const sortedKeys = Object.keys(KNOWN_COORDINATES).sort((a, b) => b.length - a.length);
-
-  for (const text of candidates) {
+    // 2. 嚴格包含匹配 (鍵名長度由大至小，避免短詞誤傷)
     for (const key of sortedKeys) {
       if (text.includes(key)) {
         return applyJitterCoords(KNOWN_COORDINATES[key], applyJitter);
+      }
+    }
+
+    // 3. 不分大小寫子字串匹配 (適用英文/德文/法文拼寫)
+    const lowerText = text.toLowerCase();
+    for (const key of sortedKeys) {
+      if (/^[a-z0-9\s.-]+$/i.test(key)) {
+        const lowerKey = key.toLowerCase();
+        if (key.length <= 4) {
+          // 短英文詞使用 word boundary 避免誤判
+          const regex = new RegExp(`\\b${escapeRegExp(lowerKey)}\\b`, 'i');
+          if (regex.test(lowerText)) {
+            return applyJitterCoords(KNOWN_COORDINATES[key], applyJitter);
+          }
+        } else if (lowerText.includes(lowerKey)) {
+          return applyJitterCoords(KNOWN_COORDINATES[key], applyJitter);
+        }
       }
     }
   }
