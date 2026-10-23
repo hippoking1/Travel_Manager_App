@@ -58,7 +58,17 @@ export const ItineraryPage: React.FC = () => {
           (b) =>
             b.title.toLowerCase().includes(q) ||
             b.description.toLowerCase().includes(q) ||
-            (b.locationName && b.locationName.toLowerCase().includes(q))
+            (b.locationName && b.locationName.toLowerCase().includes(q)) ||
+            (b.transport && (
+              b.transport.from.toLowerCase().includes(q) ||
+              b.transport.to.toLowerCase().includes(q) ||
+              (b.transport.lineInfo && b.transport.lineInfo.toLowerCase().includes(q)) ||
+              b.transport.legs?.some((l) =>
+                l.from.toLowerCase().includes(q) ||
+                l.to.toLowerCase().includes(q) ||
+                (l.lineName && l.lineName.toLowerCase().includes(q))
+              )
+            ))
         );
         if (!matchTitle && !matchSubtitle && !matchHighlights && !matchBlocks) {
           return false;

@@ -7,11 +7,6 @@ import {
   Edit2, 
   Trash2, 
   AlertTriangle, 
-  Train, 
-  Mountain, 
-  Ship, 
-  Bus, 
-  Footprints, 
   MapPin, 
   Compass, 
   Copy, 
@@ -19,7 +14,7 @@ import {
   Inbox,
   ExternalLink
 } from 'lucide-react';
-import type { TimeBlock, TransportDetail, ContainerId } from '../../../types';
+import type { TimeBlock, ContainerId } from '../../../types';
 import { SCENIC_SUB_TAGS } from '../../../types';
 import { useTripStore } from '../../../stores/tripStore';
 import { useItinerary } from '../../../stores/selectors';
@@ -28,6 +23,7 @@ import { PersonaBadge } from '../../shared/PersonaBadge';
 import { Popover } from '../../ui/Popover';
 import { formatTimeSpan } from '../../../lib/itinerary';
 import { ActivityEditor } from './ActivityEditor';
+import { TransportSummaryView } from '../../shared/TransportSummaryView';
 
 export interface ActivityCardProps {
   block: TimeBlock;
@@ -70,24 +66,6 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-  };
-
-  const getTransportIcon = (type?: TransportDetail['type']) => {
-    switch (type) {
-      case 'train':
-      case 'cogwheel':
-        return <Train className="w-3 h-3 text-sky-600 dark:text-sky-400" />;
-      case 'cable-car':
-      case 'funicular':
-        return <Mountain className="w-3 h-3 text-amber-600 dark:text-amber-400" />;
-      case 'boat':
-        return <Ship className="w-3 h-3 text-blue-600 dark:text-blue-400" />;
-      case 'bus':
-        return <Bus className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />;
-      case 'walk':
-      default:
-        return <Footprints className="w-3 h-3 text-stone-500" />;
-    }
   };
 
   const handleDelete = async () => {
@@ -281,21 +259,9 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
           </p>
         )}
 
-        {/* 交通簡介條 */}
+        {/* 交通與多段轉乘路線 */}
         {block.transport && (
-          <div className="bg-stone-50 dark:bg-stone-800/60 rounded-xl px-2.5 py-1.5 border border-stone-200/50 dark:border-stone-800 flex items-center gap-2 text-[11px] text-stone-700 dark:text-stone-300 mb-2">
-            <span className="p-0.5 rounded bg-white dark:bg-stone-700 shadow-2xs">
-              {getTransportIcon(block.transport.type)}
-            </span>
-            <span className="font-semibold">{block.transport.from}</span>
-            <span className="text-stone-400">➔</span>
-            <span className="font-semibold">{block.transport.to}</span>
-            {block.transport.duration && (
-              <span className="text-stone-400 ml-auto font-mono">
-                {block.transport.duration}
-              </span>
-            )}
-          </div>
+          <TransportSummaryView transport={block.transport} className="mb-2" />
         )}
 
         {/* 地點、海拔、導航與成員標籤 */}

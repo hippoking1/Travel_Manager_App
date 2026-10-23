@@ -2,6 +2,7 @@ import type { TimeBlock } from '../../types';
 import type { TripImportTimeBlock } from './schema';
 import { toMin, toHHmm, derivePeriod, findConflicts } from '../itinerary';
 import { inferCoordinates } from '../geo';
+import { aggregateTransportDetail } from '../transit';
 
 export interface ScheduleOptions {
   morningStart?: string;   // 預設 '09:00'
@@ -67,7 +68,7 @@ export function autoScheduleDayBlocks(
         altitude: raw.altitude,
         tags: raw.tags || [],
         tips: raw.tips,
-        transport: raw.transport,
+        transport: raw.transport ? aggregateTransportDetail(raw.transport.legs || [], raw.transport) : undefined,
       });
 
       // 更新對應時段的流水指針
@@ -98,7 +99,7 @@ export function autoScheduleDayBlocks(
         altitude: raw.altitude,
         tags: raw.tags || [],
         tips: raw.tips,
-        transport: raw.transport,
+        transport: raw.transport ? aggregateTransportDetail(raw.transport.legs || [], raw.transport) : undefined,
       });
       continue;
     }
@@ -147,7 +148,7 @@ export function autoScheduleDayBlocks(
       altitude: raw.altitude,
       tags: raw.tags || [],
       tips: raw.tips,
-      transport: raw.transport,
+      transport: raw.transport ? aggregateTransportDetail(raw.transport.legs || [], raw.transport) : undefined,
     });
   }
 

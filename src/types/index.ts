@@ -97,26 +97,51 @@ export const PERSONA_CONFIG: Record<PersonaTag, PersonaMeta> = {
 
 export type TransportType = 
   | 'train' 
+  | 'metro'
+  | 'high-speed-rail'
+  | 'tram'
+  | 'bus' 
   | 'cogwheel' 
   | 'cable-car' 
   | 'funicular' 
   | 'boat' 
-  | 'bus' 
   | 'walk' 
   | 'car'
   | 'flight';
 
 export type STPCoverage = 'free' | 'half-price' | 'not-covered';
 
+export interface TransitLeg {
+  id: string;
+  type: TransportType;
+  lineName?: string;          // 路線名稱 / 車次番號與方向 (e.g. "銀座線 往淺草", "公車 205 路", "IR 75")
+  from: string;               // 上車點 / 起點站
+  fromPlatform?: string;      // 上車月台 / 站牌 / 出口 (e.g. "3號月台", "B2北口")
+  to: string;                 // 下車點 / 轉乘站
+  toPlatform?: string;        // 下車月台 / 轉乘出口指引 (e.g. "中央改札口")
+  departureTime?: string;     // 發車時刻 'HH:mm'
+  arrivalTime?: string;       // 抵達時刻 'HH:mm'
+  duration?: string;          // 預估時間或班距備註 (e.g. "15分鐘", "每10分鐘一班")
+  cost?: string;              // 單段車資 (e.g. "JPY 240", "NT$ 35")
+  passCoverage?: string;      // 交通卡 / 通票備註 (e.g. "ICOCA", "STP 免費", "JR Pass")
+  notes?: string;             // 轉乘注意事項 (e.g. "車頭第1車廂離轉乘電梯最近")
+}
+
 export interface TransportDetail {
   type: TransportType;
   from: string;
   to: string;
   duration?: string;
-  stpCoverage: STPCoverage;
+  stpCoverage?: STPCoverage;
   discountNote?: string;       // e.g. "STP 免費", "STP 50% 折扣"
   lineInfo?: string;           // e.g. "IR 75 / 月台 4"
+  departureTime?: string;      // 首段發車時刻 'HH:mm'
+  arrivalTime?: string;        // 末段抵達時刻 'HH:mm'
+  platformInfo?: string;       // 月台或出口摘要
+  cost?: string;               // 預估總車資
+  routeUrl?: string;           // Google Maps 路線連結
   notes?: string;
+  legs?: TransitLeg[];         // 多段轉乘步驟明細
 }
 
 export interface TimeBlock {

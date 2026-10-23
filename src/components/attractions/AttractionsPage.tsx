@@ -12,7 +12,6 @@ import {
   Search, 
   Calendar, 
   Landmark, 
-  Train,
   Map as MapIcon
 } from 'lucide-react';
 import type { TimeBlock, LocationCategory } from '../../types';
@@ -28,6 +27,7 @@ import { Select } from '../ui/Field';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { EmptyState } from '../ui/EmptyState';
 import { ActivityEditor } from '../itinerary/planner/ActivityEditor';
+import { TransportSummaryView } from '../shared/TransportSummaryView';
 
 interface ItineraryItemWithDay {
   block: TimeBlock;
@@ -123,7 +123,17 @@ export const AttractionsPage: React.FC = () => {
         const matchTitle = block.title.toLowerCase().includes(q);
         const matchLoc = block.locationName?.toLowerCase().includes(q) || false;
         const matchDesc = block.description?.toLowerCase().includes(q) || false;
-        if (!matchTitle && !matchLoc && !matchDesc) return false;
+        const matchTransport = block.transport
+          ? (block.transport.from?.toLowerCase().includes(q) ||
+             block.transport.to?.toLowerCase().includes(q) ||
+             block.transport.lineInfo?.toLowerCase().includes(q) ||
+             block.transport.legs?.some((l) =>
+               l.from.toLowerCase().includes(q) ||
+               l.to.toLowerCase().includes(q) ||
+               l.lineName?.toLowerCase().includes(q)
+             ))
+          : false;
+        if (!matchTitle && !matchLoc && !matchDesc && !matchTransport) return false;
       }
 
       return true;
@@ -147,7 +157,17 @@ export const AttractionsPage: React.FC = () => {
         const matchTitle = block.title.toLowerCase().includes(q);
         const matchLoc = block.locationName?.toLowerCase().includes(q) || false;
         const matchDesc = block.description?.toLowerCase().includes(q) || false;
-        if (!matchTitle && !matchLoc && !matchDesc) return false;
+        const matchTransport = block.transport
+          ? (block.transport.from?.toLowerCase().includes(q) ||
+             block.transport.to?.toLowerCase().includes(q) ||
+             block.transport.lineInfo?.toLowerCase().includes(q) ||
+             block.transport.legs?.some((l) =>
+               l.from.toLowerCase().includes(q) ||
+               l.to.toLowerCase().includes(q) ||
+               l.lineName?.toLowerCase().includes(q)
+             ))
+          : false;
+        if (!matchTitle && !matchLoc && !matchDesc && !matchTransport) return false;
       }
 
       return true;
@@ -425,19 +445,9 @@ export const AttractionsPage: React.FC = () => {
                       </p>
                     )}
 
-                    {/* 交通細節 */}
+                    {/* 交通細節與多段轉乘路線 */}
                     {block.transport && (
-                      <div className="inline-flex items-center gap-2 bg-stone-50 dark:bg-stone-800/60 px-2.5 py-1.5 rounded-xl border border-stone-200/60 dark:border-stone-800 text-xs text-stone-700 dark:text-stone-300">
-                        <Train className="w-3.5 h-3.5 text-indigo-600" />
-                        <span className="font-semibold">{block.transport.from}</span>
-                        <span className="text-stone-400">➔</span>
-                        <span className="font-semibold">{block.transport.to}</span>
-                        {block.transport.discountNote && (
-                          <span className="text-emerald-600 dark:text-emerald-400 font-bold ml-1">
-                            • {block.transport.discountNote}
-                          </span>
-                        )}
-                      </div>
+                      <TransportSummaryView transport={block.transport} className="mt-2" />
                     )}
                   </div>
 

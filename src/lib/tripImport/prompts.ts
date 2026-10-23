@@ -15,7 +15,8 @@ export const AI_IMPORT_SYSTEM_PROMPT = `你是一位專業的旅遊行程規劃�
    - "scenic-train" (景觀火車/特色交通)
 3. 時段 period 只能是 "morning", "afternoon", "evening"。
 4. 時間格式 startTime 與 endTime 請使用 24 小時制 "HH:mm" (例如 "09:00", "14:30")。若時間不確定可省略，App 會自動按時段順序智慧排程。
-5. 住宿預訂 accommodations 與交通預訂 transports：若已有確定訂單請填寫 confirmationCode 或 bookingReference；若僅為建議，留空字串即可。`;
+5. 住宿預訂 accommodations 與交通預訂 transports：若已有確定訂單請填寫 confirmationCode 或 bookingReference；若僅為建議，留空字串即可。
+6. 行程活動若有搭乘或轉乘交通工具，可在 transport 物件填寫 from, to，若包含多段轉乘（如公車、捷運、火車），請填寫 legs 陣列，詳細標示每段的 type ("metro"|"bus"|"train"|"high-speed-rail"|"tram"|"boat"|"cable-car"|"walk"), lineName, from, fromPlatform, to, toPlatform, departureTime, arrivalTime, cost 等。`;
 
 export const PROMPT_NEW_TRIP_TEMPLATE = `請根據我們剛才討論的旅遊規劃內容，將其整理為【旅遊規劃 App】能直接匯入的標準 JSON 格式。
 
@@ -74,9 +75,23 @@ export const PROMPT_NEW_TRIP_TEMPLATE = `請根據我們剛才討論的旅遊規
           "transport": {
             "type": "train",
             "from": "關西機場",
-            "to": "京都",
+            "to": "京都車站",
             "duration": "75分鐘",
-            "stpCoverage": "not-covered"
+            "legs": [
+              {
+                "type": "train",
+                "lineName": "JR 關空特急 HARUKA",
+                "from": "關西機場站",
+                "fromPlatform": "JR月台",
+                "to": "京都車站",
+                "toPlatform": "30號月台",
+                "departureTime": "14:14",
+                "arrivalTime": "15:34",
+                "duration": "80分鐘",
+                "cost": "JPY 3,400",
+                "passCoverage": "ICOCA & HARUKA 優惠套票"
+              }
+            ]
           },
           "tags": ["scenic-train"]
         }
